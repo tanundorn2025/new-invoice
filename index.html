@@ -1,0 +1,2914 @@
+<!DOCTY
+/* ── State ── */
+var S = { timesheets:[], invoices:[] };
+var CFG = {
+  SLR:{ name:'HOYA OPTICS SLR', depts:{
+    MAIN:{name:'MAIN (Cleaning)',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    GRD:{name:'GRD (Cleaning)',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    SOTO:{name:'SOTOMARI (Cleaning)',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    NIGHT:{name:'NIGHT (Cleaning)',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    DISH:{name:'DISH WASH',rate:11900,dr:396.67,otr:74.38,hr:793.34}
+  }},
+  RP:{ name:'HOYA OPTICS RP', depts:{
+    RP:{name:'RP.',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    NIGHT:{name:'RP. NIGHT',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    DISH:{name:'DISH WASH',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    GRD:{name:'GRD.',rate:11900,dr:396.67,otr:74.38,hr:793.34}
+  }},
+  GMO:{ name:'HOYA OPTICS GMO', depts:{
+    GMO:{name:'GMO',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    PRESS:{name:'PRESS',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    GRD:{name:'GRD.',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    SOTO:{name:'SOTOMARI',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    NIGHT:{name:'NIGHT',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    DISH:{name:'DISH WASH',rate:11900,dr:396.67,otr:74.38,hr:793.34}
+  }},
+  PO:{ name:'HOYA OPTICS PO', depts:{
+    PO:{name:'OPTIC',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    CANTEEN:{name:'CANTEEN',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    SOTO:{name:'SOTOMARI',rate:11900,dr:396.67,otr:74.38,hr:793.34},
+    NIGHT:{name:'NIGHT',rate:11900,dr:396.67,otr:74.38,hr:793.34}
+  }},
+  HEAD:{ name:'HOYA OPTICS HEAD', depts:{
+    HEAD:{name:'HEAD',rate:11900,dr:396.67,otr:74.38,hr:793.34}
+  }}
+};
+var CO = {
+  nameTh:'ห้างหุ้นส่วนจำกัด เชียงใหม่ คลีนนิ่ง แอนด์ ซัพพลาย เซอร์วิส',
+  nameEn:'CHIANGMAI CLEANING AND SUPPLY SERVICE PART., LTD.',
+  addr:'159 หมู่ 11 ตำบลหนองจาก อำเภอสันทราย จังหวัดเชียงใหม่ 50290',
+  tel:'08-1287-9000', email:'CLEANING_CCS@HOTMAIL.COM',
+  tax:'0503554005172', contact:'นายฐานันดร ปราบี', logoData:''
+};
+var CUSTOMERS = {
+  1:{name:'HOYA OPTICS (THAILAND) LTD.',branch:'สำนักงานใหญ่',
+     addr:'60/31 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+     taxId:'0515541000055',branchCode:''},
+  2:{name:'HOYA OPTICS (THAILAND) LTD.',branch:'สาขา 0002',
+     addr:'60/32 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+     taxId:'0515541000055',branchCode:'0002'},
+  3:{name:'HOYA OPTICS (THAILAND) LTD.',branch:'สาขา 0001',
+     addr:'NRIE 68/4 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+     taxId:'0515541000055',branchCode:'0001'},
+  4:{name:'HOYA OPTICS (THAILAND) LTD.',branch:'สาขา 0003',
+     addr:'296 MOO.13 TAMBOL MAKHUAJAE AMPHUR MUANG LAMPHUN 51000',
+     taxId:'0515541000055',branchCode:'0003'}
+};
+var PLANT_GROUP = {PO:1,HEAD:1,RP:2,GMO:3,SLR:4};
+var TAX_INV_COUNTER = parseInt(localStorage.getItem('tax_inv_counter')||'1');
+var TAX_INV_PREFIX  = localStorage.getItem('tax_inv_prefix')||'CS';
+var DS_LAYOUT_ACTIVE = false;
+var SP_ITEMS=[], SP_SAVED=[];
+
+function getNextTaxNo(){
+  var no=TAX_INV_PREFIX+' '+String(TAX_INV_COUNTER).padStart(7,'0');
+  TAX_INV_COUNTER++;
+  localStorage.setItem('tax_inv_counter',TAX_INV_COUNTER);
+  return no;
+}
+function resetTaxCounter(start){
+  TAX_INV_COUNTER=parseInt(start)||1;
+  localStorage.setItem('tax_inv_counter',TAX_INV_COUNTER);
+}
+
+function refreshAllSelects(){
+  ['tf-plant','inv-plant','sum-plant','sp-plant'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(!el) return;
+    var cur=el.value;
+    el.innerHTML=Object.entries(CFG).map(function(e){
+      return '<option value="'+e[0]+'">'+e[1].name+'</option>';
+    }).join('');
+    if(cur) el.value=cur;
+  });
+  onPlantChange&&onPlantChange();
+  onInvPlantChange&&onInvPlantChange();
+  initSpDropdowns&&initSpDropdowns();
+  loadCustomerSettings&&loadCustomerSettings();
+}
+
+function getDeptOptions(plant){
+  var cfg=CFG[plant];
+  if(!cfg) return '';
+  return Object.entries(cfg.depts).map(function(e){
+    return '<option value="'+e[0]+'">'+e[1].name+'</option>';
+  }).join('');
+}
+
+/* ── Tax Invoice generation ── */
+function genTaxInvoices(){
+  var mon=document.getElementById('tax-mon')&&document.getElementById('tax-mon').value;
+  var taxDate=document.getElementById('tax-date')&&document.getElementById('tax-date').value||new Date().toISOString().slice(0,10);
+  if(!mon){alert('กรุณาเลือกเดือน');return;}
+  var allInv=[].concat(S.invoices||[]).concat(SP_SAVED||[]).filter(function(inv){
+    var dt=inv.dt||inv.inv_dt||'';
+    return dt.startsWith(mon);
+  });
+  if(!allInv.length){alert('ไม่มี Invoice ในเดือนนี้');return;}
+  var groups={};
+  allInv.forEach(function(inv){
+    var g=PLANT_GROUP[inv.plant]||1;
+    if(!groups[g]) groups[g]=[];
+    groups[g].push(inv);
+  });
+  var container=document.getElementById('tax-inv-list');
+  if(!container) return;
+  container.innerHTML='';
+  Object.keys(groups).forEach(function(g){
+    var invs=groups[g];
+    var cust=CUSTOMERS[g]||CUSTOMERS[1];
+    var taxNo=getNextTaxNo();
+    var total=invs.reduce(function(s,i){return s+(i.grand||i.up||0);},0);
+    var vat=total*7/107;
+    var beforeVat=total-vat;
+    var card=document.createElement('div');
+    card.className='card';
+    card.style.marginBottom='1rem';
+    var divId='tax-inv-'+g+'-'+mon;
+    var layout=loadDSLayout();
+    var formHtml='';
+    if(layout){
+      if(layout.type==='html'&&layout.html) formHtml=layout.html;
+      else{ var rh=renderDSLayout(layout,{taxNo:taxNo,taxDate:taxDate,cust:cust,invs:invs,beforeVat:beforeVat,vat:vat,grand:total}); if(rh) formHtml=rh; }
+    }
+    if(!formHtml) formHtml=buildDCTaxHTML(taxNo,taxDate,g,cust,invs,beforeVat,vat,total,mon);
+    card.innerHTML='<div class="ch no-print"><div class="ct">🧾 ใบกำกับภาษี — กลุ่ม '+g+': '+cust.branch+'</div>'
+      +'<div style="display:flex;gap:6px"><button class="btn bp bsm" onclick="downloadTaxInv(\''+divId+'\',\''+g+'\',\''+mon+'\',\''+taxDate+'\')">📥 บันทึกไฟล์</button></div></div>'
+      +'<div id="'+divId+'">'+formHtml+'</div>';
+    container.appendChild(card);
+  });
+}
+
+function loadDSLayout(){
+  var aiData=localStorage.getItem('active_form_layout');
+  if(aiData){try{var ad=JSON.parse(aiData);if(ad.type==='html'&&ad.html){var name=localStorage.getItem('active_form_name')||'AI';var badge=document.getElementById('ds-layout-badge');if(badge)badge.textContent='🤖 Layout: '+name;return ad;}}catch(e){}}
+  var data=localStorage.getItem('ds_layout');
+  if(data){DS_LAYOUT_ACTIVE=true;var name2=localStorage.getItem('ds_layout_name')||'Custom';var badge2=document.getElementById('ds-layout-badge');if(badge2)badge2.textContent='🎨 Layout: '+name2;try{return JSON.parse(data);}catch(e){}}
+  return null;
+}
+
+function notifyLayoutUpdated(name){
+  DS_LAYOUT_ACTIVE=true;
+  var badge=document.getElementById('ds-layout-badge');
+  if(badge) badge.textContent='🎨 Layout: '+name;
+}
+
+function buildDCTaxHTML(taxNo,taxDate,group,cust,invs,beforeVat,vat,grand,mon){
+  var fmt=function(n){return (+n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var d=new Date(taxDate||new Date());
+  var dd=String(d.getDate()).padStart(2,'0');
+  var mm=String(d.getMonth()+1).padStart(2,'0');
+  var yyyy=d.getFullYear()+543;
+  var BS='border:0.5px solid #555';
+  var rows=invs.map(function(inv,i){return '<tr><td style="'+BS+';padding:3pt 4pt;text-align:center;font-size:9.5pt;white-space:nowrap">'+(i+1)+'</td>'
+    +'<td style="'+BS+';padding:3pt 4pt;font-size:8.5pt;white-space:nowrap">'+(inv.no||'—')+' CLEANING SERVICE FEE.</td>'
+    +'<td style="'+BS+';padding:3pt 4pt"></td><td style="'+BS+';padding:3pt 4pt"></td>'
+    +'<td style="'+BS+';padding:3pt 4pt;text-align:right;font-size:9.5pt">'+fmt(inv.grand||inv.up||0)+'</td></tr>';}).join('');
+  var blankRows=Array(Math.max(0,8-invs.length)).fill('<tr style="height:20pt"><td style="'+BS+'"></td><td style="'+BS+'"></td><td style="'+BS+'"></td><td style="'+BS+'"></td><td style="'+BS+'"></td></tr>').join('');
+  var lhImg=CO.logoData?'<img src="'+CO.logoData+'" style="width:70pt;height:70pt;object-fit:contain">'
+    :'<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="width:70pt;height:70pt"><circle cx="60" cy="60" r="55" fill="#c8006a" opacity=".15"/><circle cx="60" cy="60" r="42" fill="none" stroke="#c8006a" stroke-width="3"/><text x="60" y="72" text-anchor="middle" font-family="Arial" font-size="36" font-weight="900" fill="#c8006a">CCS</text></svg>';
+  return '<div style="font-family:\'Sarabun\',sans-serif;font-size:10pt;color:#000;padding:8mm;box-sizing:border-box;width:100%">'
+    +'<table style="width:100%;border-collapse:collapse;margin-bottom:4pt"><tr>'
+    +'<td style="width:80pt;vertical-align:top;padding-right:8pt">'+lhImg+'</td>'
+    +'<td style="vertical-align:top"><div style="font-size:13pt;font-weight:700;color:#c8006a">'+CO.nameTh+'</div>'
+    +'<div style="font-size:9pt">'+CO.addr+'</div>'
+    +'<div style="font-size:9pt">โทรศัพท์ '+CO.tel+' Email : '+CO.email+'</div>'
+    +'<div style="font-size:9pt">สาขาที่ออกใบกำกับภาษี : '+cust.branch+'</div></td>'
+    +'<td style="vertical-align:top;text-align:right;font-size:9pt">(ต้นฉบับ)</td></tr></table>'
+    +'<div style="text-align:center;font-size:14pt;font-weight:700;border-top:1.5pt solid #000;border-bottom:1.5pt solid #000;padding:3pt 0;margin-bottom:6pt">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>'
+    +'<table style="width:100%;border-collapse:collapse;border:0.5px solid #555;font-size:9.5pt;margin-bottom:6pt">'
+    +'<tr><td style="'+BS+';padding:2.5pt 5pt;width:18%;font-weight:600">ชื่อลูกค้า</td><td style="'+BS+';padding:2.5pt 5pt;width:38%">'+cust.name+' ('+cust.branch+')</td>'
+    +'<td style="'+BS+';padding:2.5pt 5pt;width:22%;font-weight:600">เลขทะเบียนนิติบุคคล</td><td style="'+BS+';padding:2.5pt 5pt">'+CO.tax+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:2.5pt 5pt;font-weight:600">ที่อยู่</td><td style="'+BS+';padding:2.5pt 5pt">'+cust.addr+'</td>'
+    +'<td style="'+BS+';padding:2.5pt 5pt;font-weight:600">เลขประจำตัวผู้เสียภาษี</td><td style="'+BS+';padding:2.5pt 5pt">'+CO.tax+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:2.5pt 5pt;font-weight:600">เลขประจำตัวผู้เสียภาษี</td><td style="'+BS+';padding:2.5pt 5pt">'+cust.taxId+'</td>'
+    +'<td style="'+BS+';padding:2.5pt 5pt;font-weight:600">เลขที่เอกสาร</td><td style="'+BS+';padding:2.5pt 5pt;font-weight:700">'+taxNo+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:2.5pt 5pt;font-weight:600">เงื่อนไขการชำระ</td><td style="'+BS+';padding:2.5pt 5pt">—</td>'
+    +'<td style="'+BS+';padding:2.5pt 5pt;font-weight:600">วันที่</td><td style="'+BS+';padding:2.5pt 5pt">'+dd+' / '+mm+' / '+yyyy+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:2.5pt 5pt;font-weight:600">วันครบกำหนด</td><td style="'+BS+';padding:2.5pt 5pt">—</td>'
+    +'<td style="'+BS+';padding:2.5pt 5pt;font-weight:600">อัตราภาษีร้อยละ</td><td style="'+BS+';padding:2.5pt 5pt">7</td></tr></table>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:9.5pt"><thead>'
+    +'<tr style="background:#d8d8d8"><th style="'+BS+';padding:3pt 4pt;width:32pt;text-align:center">ลำดับ</th>'
+    +'<th style="'+BS+';padding:3pt 4pt;text-align:center">รายการ</th>'
+    +'<th style="'+BS+';padding:3pt 4pt;width:46pt;text-align:center">จำนวน</th>'
+    +'<th style="'+BS+';padding:3pt 4pt;width:70pt;text-align:center">ราคาต่อหน่วย</th>'
+    +'<th style="'+BS+';padding:3pt 4pt;width:80pt;text-align:center">จำนวนเงิน</th></tr></thead>'
+    +'<tbody>'+rows+blankRows+'</tbody></table>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:9.5pt;margin-top:0">'
+    +'<tr><td style="'+BS+';padding:4pt 6pt;vertical-align:top;width:60%">'
+    +'<div style="font-weight:600">หมายเหตุ</div><div>จำนวนเงินรวมทั้งสิ้น(ตัวอักษร)</div>'
+    +'<div style="margin-top:3pt;padding:3pt 6pt;background:#d0d0d0">( '+(typeof numToEng==='function'?numToEng(grand):'')+')</div></td>'
+    +'<td style="vertical-align:top;padding:0;width:40%"><table style="width:100%;border-collapse:collapse">'
+    +'<tr><td style="'+BS+';padding:3pt 6pt">ส่วนลดการค้า</td><td style="'+BS+';padding:3pt 6pt;text-align:right">—</td></tr>'
+    +'<tr><td style="'+BS+';padding:3pt 6pt">มูลค่าสินค้า</td><td style="'+BS+';padding:3pt 6pt;text-align:right">'+fmt(beforeVat)+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:3pt 6pt">ภาษีมูลค่าเพิ่ม</td><td style="'+BS+';padding:3pt 6pt;text-align:right">'+fmt(vat)+'</td></tr>'
+    +'<tr><td style="'+BS+';padding:3pt 6pt;font-weight:700">จำนวนเงินรวมทั้งสิ้น</td><td style="'+BS+';padding:3pt 6pt;text-align:right;font-weight:700">'+fmt(grand)+'</td></tr>'
+    +'</table></td></tr>'
+    +'<tr><td colspan="2" style="'+BS+';padding:3pt 6pt;font-size:8.5pt">'
+    +'* ได้รับสินค้าตามรายการข้างต้นในสภาพที่ดีพร้อมรับรองจำนวนเงินและราคาถูกต้องแล้ว<br>'
+    +'* เอกสารฉบับนี้สมบูรณ์เมื่อได้รับการลงนามจากผู้มีอำนาจของทั้งสองฝ่ายแล้วเท่านั้น</td></tr>'
+    +'<tr><td colspan="2" style="'+BS+';padding:4pt 6pt">☐ เงินสด &nbsp;&nbsp; ☐ เช็คธนาคาร &nbsp;&nbsp; สาขา ___________ &nbsp;&nbsp; เลขที่ ___________ &nbsp;&nbsp; วันที่ ___________</td></tr>'
+    +'</table>'
+    +'<div style="display:flex;justify-content:flex-end;margin-top:20pt;font-size:10pt">'
+    +'<div style="text-align:center"><div style="margin-bottom:32pt;font-weight:600">ผู้รับเงิน</div>'
+    +'<div style="border-top:1pt solid #333;width:160pt;padding-top:4pt">( '+CO.contact+' )</div></div></div></div>';
+}
+
+function downloadTaxInv(divId,group,mon,taxDate){
+  var el=document.getElementById(divId);
+  if(!el) return;
+  var css='*{box-sizing:border-box;margin:0;padding:0}@page{size:A4 portrait;margin:10mm 12mm}body{font-family:\'Sarabun\',sans-serif;font-size:10pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'+css+'</style></head><body>'+el.innerHTML+'</body></html>';
+  var blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='ใบกำกับภาษี-กลุ่ม'+group+'-'+mon+'.html';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(url);},8000);
+}
+
+function renderDSLayout(layout,data){ return null; }
+
+/* ── Designer Tab ── */
+var _designerWin=null;
+function openAIDesigner(){
+  try{localStorage.setItem('co_data',JSON.stringify(CO));localStorage.setItem('customers_data',JSON.stringify(CUSTOMERS));if(S&&S.invoices)localStorage.setItem('sys_invoices',JSON.stringify(S.invoices.slice(0,5)));}catch(e){}
+  var url='invoice-designer-ai.html';
+  _designerWin=window.open(url,'ai-designer','width=1200,height=800,toolbar=0,menubar=0,scrollbars=1,resizable=1');
+  if(!_designerWin){alert('กรุณาอนุญาต popup สำหรับเว็บไซต์นี้ก่อนครับ');return;}
+  showToast('🤖 เปิด AI Designer แล้ว');
+}
+function loadAILayout(){
+  try{
+    var saved=localStorage.getItem('active_form_layout');
+    var name=localStorage.getItem('active_form_name')||'ไม่ทราบชื่อ';
+    if(!saved){alert('ยังไม่มี layout จาก AI Designer');return;}
+    document.getElementById('designer-layout-dot')&&(document.getElementById('designer-layout-dot').style.background='#22c55e');
+    document.getElementById('designer-layout-name')&&(document.getElementById('designer-layout-name').textContent='✅ Layout: "'+name+'"');
+    notifyLayoutUpdated(name);
+    showToast('✅ โหลด Layout "'+name+'" แล้ว');
+  }catch(e){alert('เกิดข้อผิดพลาด: '+e.message);}
+}
+function resetAILayout(){
+  if(!confirm('ล้าง layout?')) return;
+  localStorage.removeItem('active_form_layout');localStorage.removeItem('active_form_name');
+  localStorage.removeItem('ds_layout');localStorage.removeItem('ds_layout_name');
+  document.getElementById('designer-layout-dot')&&(document.getElementById('designer-layout-dot').style.background='#aaa');
+  document.getElementById('designer-layout-name')&&(document.getElementById('designer-layout-name').textContent='ยังไม่มี layout');
+  showToast('✅ ล้าง layout แล้ว');
+}
+function d2InitTab(){
+  try{var name=localStorage.getItem('active_form_name');if(name){document.getElementById('designer-layout-dot')&&(document.getElementById('designer-layout-dot').style.background='#22c55e');document.getElementById('designer-layout-name')&&(document.getElementById('designer-layout-name').textContent='✅ Layout: "'+name+'"');}}catch(e){}
+}
+function v2InitTab(){ d2InitTab(); }
+
+PE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCS Invoice System — HOYA OPTICS</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+:root{
+  --navy:#1a3a5c;--navy2:#2563a8;--gold:#d4920e;--goldbg:#fef3dc;
+  --green:#1a6b3c;--greenbg:#dcf0e5;--red:#9b1c1c;--redbg:#fee2e2;
+  --bg:#f0f2f5;--surf:#fff;--surf2:#f8f9fb;--bord:#dde1e9;
+  --txt:#1a2035;--muted:#6b7592;--light:#9ba3bf;
+  --r:10px;--rl:16px;--shd:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--txt);font-size:15px;line-height:1.6}
+
+.hdr{background:var(--navy);color:#fff;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.hdr-logo{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700}
+.hdr-badge{background:var(--gold);color:var(--navy);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px}
+.hdr-meta{font-size:12px;opacity:.65;font-family:'IBM Plex Mono',monospace}
+
+.tabs{background:var(--surf);border-bottom:1px solid var(--bord);display:flex;padding:0 1.5rem;overflow-x:auto}
+.tb{padding:13px 18px;font-size:13.5px;font-weight:500;font-family:'Sarabun',sans-serif;cursor:pointer;background:none;border:none;border-bottom:3px solid transparent;color:var(--muted);transition:all .18s;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.tb:hover{color:var(--navy2);background:var(--surf2)}
+.tb.on{color:var(--navy);border-bottom-color:var(--navy2);font-weight:600}
+
+.wrap{max-width:100%;margin:0;padding:1.25rem 1.5rem}
+.panel{display:none}.panel.on{display:block}
+
+.card{background:var(--surf);border-radius:var(--rl);border:1px solid var(--bord);box-shadow:var(--shd);padding:1.25rem;margin-bottom:1rem}
+.ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--bord)}
+.ct{font-size:14.5px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:8px}
+.ci{width:28px;height:28px;background:var(--navy);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+
+.fg{display:flex;flex-direction:column;gap:4px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:.75rem}
+.g5{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:.75rem}
+.full{grid-column:1/-1}
+label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+input[type=text],input[type=number],input[type=date],select,textarea{
+  padding:7px 10px;border:1px solid var(--bord);border-radius:var(--r);
+  font-family:'Sarabun',sans-serif;font-size:13.5px;color:var(--txt);background:var(--surf);
+  transition:border-color .18s,box-shadow .18s;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy2);box-shadow:0 0 0 3px rgba(37,99,168,.12)}
+input[type=number]{font-family:'IBM Plex Mono',monospace}
+input[readonly]{background:#f8f9fb;color:var(--muted)}
+
+.st{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;
+  margin:1rem 0 .5rem;padding-bottom:5px;border-bottom:1px solid var(--bord);display:flex;align-items:center;gap:5px}
+
+.btn{padding:7px 14px;border-radius:var(--r);font-family:'Sarabun',sans-serif;font-size:13px;font-weight:600;
+  cursor:pointer;border:none;transition:all .18s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.bp{background:var(--navy);color:#fff}.bp:hover{background:var(--navy2)}
+.ba{background:var(--gold);color:var(--navy)}.ba:hover{background:#b87d0c}
+.bs{background:var(--green);color:#fff}.bs:hover{background:#22a55e}
+.bo{background:none;border:1.5px solid var(--bord);color:var(--muted)}.bo:hover{border-color:var(--navy2);color:var(--navy2)}
+.bd{background:var(--red);color:#fff}
+.bsm{padding:4px 9px;font-size:11.5px}
+.brow{display:flex;gap:7px;margin-top:1rem;flex-wrap:wrap}
+
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600}
+.bg-navy{background:#e0eaf7;color:var(--navy)}
+.bg-gold{background:var(--goldbg);color:#7a5200}
+.bg-green{background:var(--greenbg);color:var(--green)}
+
+.alert{padding:10px 13px;border-radius:var(--r);font-size:13px;margin-bottom:.75rem;display:flex;align-items:flex-start;gap:9px}
+.ai{background:#e0eaf7;color:var(--navy);border-left:4px solid var(--navy2)}
+.as{background:var(--greenbg);color:var(--green);border-left:4px solid var(--green)}
+
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-bottom:1rem}
+.sc{background:var(--surf2);border:1px solid var(--bord);border-radius:var(--r);padding:.75rem}
+.sl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:2px}
+.sv{font-size:19px;font-weight:700;color:var(--navy);font-family:'IBM Plex Mono',monospace}
+.sv.gold{color:var(--gold)}.sv.grn{color:var(--green)}
+
+/* ================================================
+   ATTENDANCE TABLE
+   ================================================ */
+.att-outer{overflow-x:auto;-webkit-overflow-scrolling:touch;margin-top:.5rem;border:1px solid var(--bord);border-radius:var(--r);position:relative;scrollbar-width:none;-ms-overflow-style:none}
+.att-outer::-webkit-scrollbar{display:none}
+.ts-scroll-bar{overflow-x:auto;overflow-y:hidden;height:14px;margin-top:2px}
+.ts-scroll-bar > div{height:1px}
+.ts-zoom-bar{display:flex;align-items:center;gap:8px;margin-top:6px;padding:4px 6px;background:var(--surf2);border-radius:var(--r);border:1px solid var(--bord)}
+.ts-zoom-bar label{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+.ts-zoom-bar input[type=range]{flex:1;accent-color:var(--navy)}
+.ts-zoom-bar span{font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--navy);min-width:36px;text-align:center}
+.ts-scale-wrap{transform-origin:top left;transition:transform .15s}
+.att{border-collapse:separate;border-spacing:0;font-size:11px;width:100%;min-width:900px}
+
+/* header row — base */
+.att thead th{
+  background:#bfbfbf;color:#000000;
+  padding:4px 2px;text-align:center;font-weight:600;font-size:10.5px;
+  border-right:1px solid rgba(0,0,0,.15);border-bottom:1px solid rgba(0,0,0,.15);white-space:nowrap}
+/* วันอาทิตย์ — เทาเข้มขึ้นเล็กน้อยเพื่อแยกแยะ ตัวอักษรดำ */
+.att thead th.wknd{background:#a8a8a8!important;color:#000000!important;font-weight:700}
+/* วันหยุดพิเศษ — เทาอมเหลืองอ่อน ตัวอักษรดำ */
+.att thead th.hday{background:#c8b88c!important;color:#000000!important;font-weight:700}
+
+.att td{border-right:1px solid var(--bord);border-bottom:1px solid var(--bord);padding:7px 1px;text-align:center;vertical-align:middle}
+.att .no-col{width:28px;background:var(--surf2);font-weight:600;color:var(--muted);font-size:12px;position:sticky;left:0;z-index:3}
+.att thead th.no-col{position:sticky;left:0;z-index:5;background:#bfbfbf}
+.att .nm{text-align:left;padding:7px 7px;min-width:155px;font-size:11.5px;position:sticky;left:28px;z-index:3;background:var(--surf);box-shadow:2px 0 4px rgba(0,0,0,.08)}
+.att thead th:nth-child(2){position:sticky;left:28px;z-index:5;background:#bfbfbf;box-shadow:2px 0 4px rgba(0,0,0,.15)}
+.att .sub-hdr td.no-col{position:sticky;left:0;z-index:3;background:#bfbfbf}
+.att .sub-hdr td.nm{position:sticky;left:28px;z-index:3;background:#bfbfbf}
+.att .tot-row td:first-child{position:sticky;left:0;z-index:3;background:#ffffff}
+.att .tot-row td:nth-child(2){position:sticky;left:28px;z-index:3;background:#ffffff}
+.att .remark-row td{position:relative;z-index:1}
+
+/* cell input — ช่องกรอกค่าวัน — รองรับ 5 ตัวอักษร เช่น 0.345 */
+.att input.dc{
+  width:24px;padding:2px 1px;font-size:16px;
+  border:1px solid #b8c4d8;border-radius:3px;text-align:center;
+  font-family:'IBM Plex Mono',monospace;background:#ffffff;color:#1a2035}
+.att input.dc:focus{border-color:var(--navy2);outline:none;background:#e8f0fc}
+
+/* เซลล์วันที่มี OT เลขล่าง = ชั่วโมง, เลขบน = OT */
+.cell-wrap{display:flex;flex-direction:column;align-items:stretch;gap:0px}
+.cell-ot{font-size:8px;color:#c8060a;font-weight:700;line-height:1;min-height:9px;font-family:'IBM Plex Mono',monospace}
+.cell-day{display:flex;align-items:center;justify-content:center}
+
+.att input.nm-in{width:100%;padding:4px 5px;font-size:14px;border:1px solid #ccc;border-radius:3px;font-family:'Sarabun',sans-serif}
+.att input.nm-in:focus{border-color:var(--navy2);outline:none}
+
+/* OT / H / OT.H / Total summary columns */
+.att .ot-col{background:#e8f5d8;font-family:'IBM Plex Mono',monospace;font-size:13.5px;min-width:42px;color:#2d5016;font-weight:600}
+.att .h-col{background:#d8f0e4;font-family:'IBM Plex Mono',monospace;font-size:13.5px;min-width:42px;color:#1a4a2e;font-weight:600}
+.att .oth-col{background:#f0d8ec;font-family:'IBM Plex Mono',monospace;font-size:13.5px;min-width:42px;color:#4a1a40;font-weight:600}
+.att .ttl-col{background:#d8e4f8;font-weight:700;font-family:'IBM Plex Mono',monospace;font-size:13.5px;min-width:44px;color:#1a2a5c}
+
+.att .tot-row td{background:#ffffff;color:#000000;font-weight:800;font-family:'IBM Plex Mono',monospace;font-size:13.5px;padding:12px 2px;border-top:2px solid #333}
+.att .tot-row td.nm{font-family:'Sarabun',sans-serif;background:#ffffff;color:#000000;font-size:14px}
+.att .sub-hdr td{background:#bfbfbf;color:#000000;font-weight:600;font-size:11px;padding:10px 2px;line-height:1.3}
+.att .sub-hdr td.nm{padding:10px 7px}
+
+/* weekday cell body — วันธรรมดา */
+.att td.wknd-cell{background:#eef3ff}
+/* วันหยุดพิเศษ */
+.att td.hday-cell{background:#fff3e0}
+
+.att input.dc.dc-ot-in{
+  width:24px;font-size:12px;color:#c8060a;font-weight:700;
+  background:#fff5f5;border-color:#e89090;text-align:right}
+.att input.dc.dc-ot-in:focus{background:#fff0f0;border-color:#c8060a}
+
+.att .val-cell{font-family:'IBM Plex Mono',monospace;font-size:10.5px}
+.att .sum-row td{background:#f0eef8;font-weight:700;font-family:'IBM Plex Mono',monospace}
+.att .remark-row td{background:#fffbe0;font-size:11px;text-align:left;padding:4px 7px;color:var(--muted);font-style:italic}
+
+/* DATA TABLE */
+.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt th{background:var(--surf2);padding:8px 10px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--bord)}
+.dt td{padding:8px 10px;border-bottom:1px solid var(--bord);vertical-align:middle}
+.dt tr:last-child td{border-bottom:none}
+.dt tr:hover td{background:var(--surf2)}
+.dt .num{font-family:'IBM Plex Mono',monospace;text-align:right}
+.dt .tr-tot td{background:var(--navy);color:#fff;font-weight:700}
+.dt .tr-sub td{background:var(--goldbg);font-weight:600;color:var(--navy)}
+
+/* INVOICE PRINT */
+.inv-page{border:1.5px solid var(--bord);border-radius:var(--rl);padding:1.75rem;background:#fff}
+.inv-hdr{text-align:center;margin-bottom:1rem}
+.inv-title{font-size:19px;font-weight:700;color:var(--navy)}
+.inv-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.inv-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:.75rem 0}
+.inv-tbl th{background:var(--navy);color:#fff;padding:6px 10px;font-weight:600}
+.inv-tbl td{padding:5px 10px;border-bottom:1px solid #eee}
+.inv-tbl .num{text-align:right;font-family:'IBM Plex Mono',monospace}
+.totals{margin-top:.75rem}
+.t-row{display:flex;justify-content:flex-end;gap:2rem;padding:4px 0;font-size:13px;border-top:1px solid var(--bord)}
+.t-row.grand{font-weight:700;font-size:14.5px;color:var(--navy);border-top:2px solid var(--navy);padding-top:7px}
+.t-lbl{color:var(--muted)}.t-val{font-family:'IBM Plex Mono',monospace;min-width:130px;text-align:right}
+
+.fcrd{background:var(--surf);border:1px solid var(--bord);border-radius:var(--r);overflow:hidden;margin-bottom:.75rem}
+.fhdr{background:var(--navy);color:#fff;padding:8px 13px;font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+.fbdy{padding:9px 13px}
+
+/* ================================================
+   PRINT
+   ================================================ */
+@media print{
+  .hdr,.tabs,.no-print{display:none!important}
+  .wrap{max-width:100%;padding:2mm}
+  body{background:#fff;font-size:9pt}
+  .card{box-shadow:none;border:none;padding:2mm;margin-bottom:2mm}
+  .panel{display:none!important}
+  .panel.print-target{display:block!important}
+
+  /* attendance */
+  .att-outer{overflow:visible;border:none}
+  .att .nm,.att .no-col,.att thead th:nth-child(2),.att thead th.no-col{position:static!important;box-shadow:none!important}
+  .att{font-size:7.5pt;min-width:0;width:100%;table-layout:auto;border-collapse:collapse!important}
+  .att thead th{background:#1a3a5c!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:2px 1px}
+  .att thead th.wknd{background:#8fa8c8!important;color:#1a2035!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .att thead th.hday{background:#c8a060!important;color:#1a2035!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .att td{padding:1px 1px;font-size:7pt}
+  .att .nm{min-width:0;padding:1px 3px;font-size:7.5pt}
+  .att input.dc,.att input.nm-in{border:none;background:transparent;font-size:7pt;padding:0;width:auto;max-width:28px}
+  .att input.nm-in{max-width:none;width:100%}
+  .att .tot-row td{background:#1a3a5c!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .att .sub-hdr td{background:#334f70!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .att td.wknd-cell{background:#eef3ff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .att td.hday-cell{background:#fff3e0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .cell-ot{font-size:6pt}
+  #ts-remark{border:none!important;border-bottom:1px solid #999!important;background:transparent!important;font-size:7pt;width:calc(100% - 60pt)}
+
+  .inv-page{border:none;padding:0}
+  #inv-preview{display:block!important}
+
+  .dt{font-size:8.5pt}
+  .dt .tr-tot td{background:#1a3a5c!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .print-header-block{display:block!important}
+}
+.print-header-block{display:none}
+
+
+/* ── Designer V2 ── */
+
+
+/* toolbar */
+#t7 #tb1, #t7 #tb2 {display:flex;align-items:center;gap:4px;padding:5px 8px;background:#13151b;border-bottom:1px solid #2a2e3a;flex-wrap:wrap;flex-shrink:0}
+#t7 #tb1 {border-bottom:2px solid #2a6bdf}
+#t7 .btn {background:#252830;border:1px solid #333846;color:#b8bcc8;padding:4px 9px;border-radius:4px;font-size:12px;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap;line-height:1.4}
+#t7 .btn:hover {background:#2e3340;color:#fff}
+#t7 .btn.act {background:#2a6bdf;color:#fff;border-color:#1a5bcf}
+#t7 .btn.g {background:#1a3d1a;color:#7fdf6f;border-color:#2a5d2a}
+#t7 .btn.r {background:#3d1a1a;color:#ef8f8f;border-color:#5d2a2a}
+#t7 .btn.p {background:#2d1a4a;color:#c0a0ff;border-color:#4d3a7a}
+#t7 .sep {width:1px;height:22px;background:#2a2e3a;margin:0 2px;flex-shrink:0}
+#t7 .lbl {font-size:11px;color:#6a7080;white-space:nowrap}
+
+/* formula bar */
+#t7 #fbar {display:flex;align-items:center;background:#13151b;border-bottom:1px solid #2a2e3a;flex-shrink:0;height:26px}
+#t7 #fcell {width:72px;padding:3px 8px;font-size:12px;font-family:monospace;background:#1e2229;border:none;border-right:1px solid #2a2e3a;color:#6ab4ff;text-align:center;height:100%}
+#t7 #fcell:focus {outline:none}
+#t7 #fval {flex:1;padding:3px 8px;font-size:12px;background:#1e2229;border:none;color:#c8ccd8;font-family:'Sarabun',sans-serif;height:100%;-webkit-user-select:text;user-select:text}
+#t7 #fval:focus {outline:none;background:#16181f}
+
+/* main */
+#t7 #main {display:flex;flex:1;overflow:hidden;min-height:0}
+
+/* grid */
+#t7 #gscroll {flex:1;overflow:auto;background:#252830;position:relative}
+#t7 #gwrap {display:inline-block;position:relative}
+#t7 #corner {position:sticky;top:0;left:0;width:46px;height:24px;background:#13151b;border-right:1px solid #2a2e3a;border-bottom:2px solid #2a6bdf;z-index:30;flex-shrink:0}
+#t7 #colhdrs {position:sticky;top:0;display:flex;background:#13151b;border-bottom:2px solid #2a6bdf;z-index:20;padding-left:46px}
+#t7 .chdr {height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#6a7080;border-right:1px solid #2a2e3a;flex-shrink:0;cursor:col-resize;position:relative;-webkit-user-select:none;user-select:none}
+#t7 .chdr.hl {background:#1a3560;color:#6ab4ff}
+#t7 .chdr.sel {background:#2a6bdf;color:#fff}
+#t7 .chdr-rz {position:absolute;right:-3px;top:0;width:6px;height:100%;cursor:col-resize;z-index:5}
+#t7 .chdr-rz:hover {background:rgba(42,107,223,.6)}
+
+#t7 #gbody {display:block}
+#t7 .grow {display:flex}
+#t7 .rnum {width:46px;min-width:46px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#6a7080;border-right:1px solid #2a2e3a;border-bottom:1px solid #252830;background:#13151b;flex-shrink:0;position:sticky;left:0;z-index:10;cursor:row-resize;-webkit-user-select:none;user-select:none;position:relative}
+#t7 .rnum.hl {background:#1a3560;color:#6ab4ff}
+#t7 .rnum.sel {background:#2a6bdf;color:#fff}
+#t7 .rnum-rz {position:absolute;bottom:-3px;left:0;width:100%;height:6px;cursor:row-resize;z-index:5}
+#t7 .rnum-rz:hover {background:rgba(42,107,223,.6)}
+
+#t7 .cell {display:flex;align-items:flex-start;flex-shrink:0;overflow:hidden;cursor:cell;position:relative;background:#fff;border-right:1px solid #d0d4dc;border-bottom:1px solid #d0d4dc}
+#t7 .cell.mhide {display:none}
+#t7 .cell.csel {outline:2px solid #2a6bdf!important;outline-offset:-2px;z-index:8}
+#t7 .cell.cinsel {background:#ddeeff!important}
+#t7 .cell-txt {width:100%;height:100%;padding:2px 4px;font-family:'Sarabun',sans-serif;font-size:10pt;line-height:1.35;overflow:hidden;white-space:pre-wrap;word-break:break-word;outline:none;-webkit-user-select:text;user-select:text}
+#t7 .cell-txt[contenteditable=true] {cursor:text;background:rgba(255,255,255,.05)}
+
+/* side panel */
+#t7 #side {width:220px;background:#13151b;border-left:1px solid #2a2e3a;overflow-y:auto;flex-shrink:0;font-size:12px}
+#t7 .sph {padding:6px 10px;font-size:10px;font-weight:700;color:#5a6070;letter-spacing:.07em;text-transform:uppercase;background:#0d0f14;border-bottom:1px solid #2a2e3a;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+#t7 .spb {padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+#t7 .spr {display:flex;align-items:center;gap:5px}
+#t7 .spl {font-size:11px;color:#5a6070;min-width:56px;flex-shrink:0}
+#t7 .spi {background:#0d0f14;border:1px solid #2a2e3a;color:#b8bcc8;border-radius:3px;padding:3px 5px;font-size:11.5px;width:100%;font-family:'Sarabun',sans-serif}
+#t7 .spi:focus {outline:none;border-color:#2a6bdf}
+
+/* preview */
+#t7 #prev {width:280px;background:#3a3e48;border-left:1px solid #2a2e3a;display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+#t7 #prevhdr {padding:5px 10px;font-size:10px;font-weight:700;color:#5a6070;text-transform:uppercase;background:#0d0f14;border-bottom:1px solid #2a2e3a;flex-shrink:0;display:flex;justify-content:space-between;align-items:center}
+#t7 #prevscroll {flex:1;overflow:auto;padding:10px}
+#t7 #prevpaper {background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.5);transform-origin:top left}
+
+/* status */
+#t7 #sbar {height:20px;background:#0d0f14;border-top:1px solid #2a2e3a;display:flex;align-items:center;padding:0 10px;font-size:10.5px;color:#5a6070;gap:10px;flex-shrink:0}
+
+
+/* ── DS Designer Styles ── */
+.ds-tb{background:#2e3341;border:1px solid #3a3f4e;color:#c8ccd8;padding:3px 8px;border-radius:5px;font-size:11.5px;cursor:pointer;font-family:'Sarabun',sans-serif;white-space:nowrap}
+.ds-tb:hover{background:#3a3f4e;color:#fff}
+.ds-tb.ds-on{background:#4a90d9;color:#fff;border-color:#4a90d9}
+.ds-tlb{width:34px;height:34px;border-radius:6px;border:1px solid transparent;background:none;color:#8891aa;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.ds-tlb:hover{background:#2e3341;color:#c8ccd8}
+.ds-tlb.ds-on{background:#4a90d9;color:#fff}
+.ds-el{position:absolute;cursor:move}
+.ds-el.ds-sel{outline:2px solid #4a90d9;outline-offset:0;z-index:1000!important}
+.ds-el.ds-sel .ds-rh{display:block}
+.ds-rh{display:none;position:absolute;width:8px;height:8px;background:#4a90d9;border:1.5px solid #fff;border-radius:2px;z-index:1001}
+.ds-rh-nw{top:-4px;left:-4px;cursor:nw-resize}
+.ds-rh-n{top:-4px;left:calc(50% - 4px);cursor:n-resize}
+.ds-rh-ne{top:-4px;right:-4px;cursor:ne-resize}
+.ds-rh-e{top:calc(50% - 4px);right:-4px;cursor:e-resize}
+.ds-rh-se{bottom:-4px;right:-4px;cursor:se-resize}
+.ds-rh-s{bottom:-4px;left:calc(50% - 4px);cursor:s-resize}
+.ds-rh-sw{bottom:-4px;left:-4px;cursor:sw-resize}
+.ds-rh-w{top:calc(50% - 4px);left:-4px;cursor:w-resize}
+.ds-pg{background:#2a2d35;border-radius:6px;overflow:hidden;margin-bottom:4px}
+.ds-pgh{padding:6px 10px;font-size:10.5px;font-weight:700;color:#8891aa;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;display:flex;justify-content:space-between;background:#232631}
+.ds-pr{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;gap:6px;border-top:1px solid #1e2128}
+.ds-pl{font-size:11px;color:#8891aa;white-space:nowrap;flex-shrink:0;min-width:72px}
+.ds-pi{background:#1e2128;border:1px solid #3a3f4e;color:#c8ccd8;border-radius:4px;padding:3px 6px;font-size:11.5px;width:100%;font-family:'Sarabun',sans-serif}
+.ds-pi:focus{outline:none;border-color:#4a90d9}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-logo"><span class="hdr-badge">CCS</span>ระบบออก Invoice &amp; Summary — HOYA OPTICS</div>
+  <div class="hdr-meta">Chiangmai Cleaning and Supply Service</div>
+</header>
+
+<nav class="tabs">
+  <button class="tb on" onclick="sw('t1',this)">📋 ใบบันทึกเวลา</button>
+  <button class="tb" onclick="sw('t2',this)">📄 Invoice</button>
+  <button class="tb" onclick="sw('t3',this)">📊 Summary</button>
+  <button class="tb" onclick="sw('t5',this)">⭐ Special Invoice</button>
+  <button class="tb" onclick="sw('t6',this)">🧾 ใบกำกับภาษี</button>
+  <button class="tb" onclick="sw('t4',this)">⚙️ ตั้งค่า</button>
+</nav>
+
+<div class="wrap">
+
+<!-- ========== TAB 1 : ใบบันทึกเวลา ========== -->
+<div id="t1" class="panel on">
+  <div class="card no-print">
+    <div class="ch">
+      <div class="ct"><div class="ci">📋</div>ตั้งค่าใบบันทึกเวลา</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn bo bsm" onclick="loadSample()">📂 โหลดตัวอย่าง</button>
+        <button class="btn bs bsm" onclick="showCopyNamesDialog()">📋 ดึงชื่อจากงวดก่อน</button>
+        <button class="btn bs bsm" onclick="exportTSExcel()">📥 Export Excel</button>
+        <button class="btn bp bsm" onclick="showTSPreview()">👁️ Preview / พิมพ์ใบบันทึก</button>
+      </div>
+    </div>
+
+    <!-- โรงงาน + แผนก แยกกัน -->
+    <div class="g4" style="gap:.75rem">
+      <div class="fg">
+        <label>โรงงาน (Plant)</label>
+        <select id="tf-plant" onchange="onPlantChange()">
+          <option value="SLR">HOYA OPTICS SLR</option>
+          <option value="GMO">HOYA OPTICS GMO</option>
+          <option value="PO">HOYA OPTICS PO</option>
+          <option value="HEAD">HEAD OFFICE</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>แผนก (Department)</label>
+        <select id="tf-dept" onchange="onDeptChange()">
+          <option value="MAIN">MAIN (แผนกหลัก)</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>วันที่เริ่ม</label>
+        <input type="date" id="tf-ds" value="2024-10-11" onchange="buildGrid()">
+      </div>
+      <div class="fg">
+        <label>วันที่สิ้นสุด</label>
+        <input type="date" id="tf-de" value="2024-11-10" onchange="buildGrid()">
+      </div>
+    </div>
+
+    <!-- วันหยุดพิเศษ -->
+    <div class="st">🎌 กำหนดวันหยุดพิเศษในงวดนี้ (นอกเหนือจากวันอาทิตย์)</div>
+    <div class="g2" style="gap:.75rem;align-items:end">
+      <div class="fg">
+        <label>เพิ่มวันหยุดพิเศษ (เลือกวันที่)</label>
+        <input type="date" id="hday-input">
+      </div>
+      <div>
+        <button class="btn ba bsm" onclick="addHoliday()">+ เพิ่มวันหยุด</button>
+      </div>
+    </div>
+    <div id="holiday-list" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+
+    <!-- จัดการแถว -->
+    <div style="margin-top:.875rem;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:12px;color:var(--muted);font-weight:600">พนักงานประจำ:</span>
+      <button class="btn ba bsm" onclick="addRow('reg')">+ แถว</button>
+      <button class="btn bo bsm" onclick="removeRow('reg')">− แถว</button>
+      <span style="font-size:12px;color:var(--muted);font-weight:600;margin-left:10px">พนักงานแทน:</span>
+      <button class="btn ba bsm" onclick="addRow('sub')">+ แถว</button>
+      <button class="btn bo bsm" onclick="removeRow('sub')">− แถว</button>
+    </div>
+
+    <div class="brow">
+      <button class="btn bp" onclick="saveTS()">💾 บันทึกใบบันทึกเวลา</button>
+      <button class="btn ba" onclick="goInv()">➡️ ต่อสร้าง Invoice</button>
+    </div>
+  </div>
+
+  <!-- ATTENDANCE TABLE (printable) -->
+  <div class="card" id="ts-card" style="padding:1rem;position:relative">
+    <div id="ts-out"></div>
+    <!-- Sticky scrollbar ด้านล่าง (เหมือน Excel) -->
+    <div id="ts-hscroll" class="no-print" style="display:none;overflow-x:auto;overflow-y:hidden;height:14px;position:sticky;bottom:0;background:#f0f2f5;border-top:1px solid #dde1e9;z-index:10">
+      <div id="ts-hscroll-inner" style="height:1px"></div>
+    </div>
+  </div>
+
+  <!-- Excel-style zoom slider มุมขวาล่าง (fixed) -->
+  <div id="ts-zoom-fixed" class="no-print" style="display:none;position:fixed;bottom:16px;right:24px;z-index:500;background:#fff;border:1px solid #dde1e9;border-radius:8px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:flex;align-items:center;gap:8px">
+    <button onclick="stepZoom(-10)" style="border:none;background:none;font-size:16px;cursor:pointer;color:#555;padding:0 2px">−</button>
+    <input type="range" id="ts-zoom" min="30" max="150" value="100" step="5"
+      oninput="applyZoom(this.value)"
+      style="width:100px;accent-color:#1a3a5c;cursor:pointer">
+    <button onclick="stepZoom(10)" style="border:none;background:none;font-size:16px;cursor:pointer;color:#555;padding:0 2px">+</button>
+    <span id="ts-zoom-val" style="font-size:12px;font-family:monospace;color:#1a3a5c;min-width:36px;text-align:center">100%</span>
+    <button onclick="applyZoom(100)" style="border:1px solid #dde1e9;background:#f8f9fb;border-radius:4px;font-size:11px;cursor:pointer;padding:2px 6px;color:#555">รีเซ็ต</button>
+  </div>
+
+  <div class="card no-print">
+    <div class="ch"><div class="ct">📁 ใบบันทึกเวลาที่บันทึกไว้</div></div>
+    <div id="saved-ts"><p style="color:var(--light);font-size:13px;text-align:center;padding:.75rem">ยังไม่มีข้อมูล</p></div>
+  </div>
+</div>
+
+<!-- Timesheet Preview Modal -->
+<div id="ts-preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;overflow-y:auto;padding:20px">
+  <div style="background:#fff;border-radius:16px;max-width:1100px;margin:0 auto;box-shadow:0 8px 40px rgba(0,0,0,.3);overflow:hidden">
+    <!-- modal header -->
+    <div style="background:#1a3a5c;color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:15px;font-weight:700">👁️ Preview ใบบันทึกเวลา</span>
+      <div style="display:flex;gap:8px">
+        <button onclick="doPrintTS()" style="background:#d4920e;color:#1a2035;border:none;border-radius:8px;padding:7px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:Sarabun,sans-serif">📥 บันทึกไฟล์ (.html)</button>
+        <button onclick="document.getElementById('ts-preview-modal').style.display='none'" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:Sarabun,sans-serif">✕ ปิด</button>
+      </div>
+    </div>
+    <!-- preview CSS override -->
+    <style>
+      #ts-preview-inner .att-outer{
+        overflow-x:auto!important;
+        scrollbar-width:auto!important;
+        -ms-overflow-style:auto!important;
+      }
+      #ts-preview-inner .att-outer::-webkit-scrollbar{
+        display:block!important;
+        height:8px;
+      }
+      #ts-preview-inner .att-outer::-webkit-scrollbar-track{background:#f0f2f5}
+      #ts-preview-inner .att-outer::-webkit-scrollbar-thumb{background:#aab4c8;border-radius:4px}
+    </style>
+    <!-- preview content -->
+    <div id="ts-print-msg" style="display:none;background:#1a4a2e;color:#fff;padding:12px 20px;font-size:13px;font-family:Sarabun,sans-serif;line-height:1.7">
+      ✅ <strong>ดาวน์โหลดไฟล์สำเร็จแล้ว!</strong><br>
+      <span style="font-size:12px">
+        👉 ขั้นตอนพิมพ์: <strong>เปิดไฟล์ .html</strong> ที่โหลดมา →
+        หน้าต่างพิมพ์จะเปิด<strong>อัตโนมัติ</strong> (A4 landscape) →
+        กด <strong>พิมพ์</strong> ได้เลย<br>
+        <span style="opacity:.8">💡 ถ้าไม่เปิดอัตโนมัติ กด Ctrl+P (Windows) หรือ Cmd+P (Mac)</span>
+      </span>
+    </div>
+    <div id="ts-preview-content" style="padding:16px;overflow-x:auto;overflow-y:auto;background:#f8f9fb;max-height:80vh">
+      <div id="ts-preview-inner" style="background:#fff;padding:12px;border-radius:8px;min-width:max-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Copy Names Modal -->
+<div id="copy-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:480px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.2)">
+    <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:1rem">📋 ดึงชื่อจากงวดก่อนหน้า</div>
+    <div class="fg" style="margin-bottom:.875rem">
+      <label>เลือกงวดที่บันทึกไว้</label>
+      <select id="copy-src" style="padding:8px;border:1px solid var(--bord);border-radius:8px;font-size:13.5px;font-family:Sarabun,sans-serif;width:100%"></select>
+    </div>
+    <div class="alert ai" style="font-size:12.5px">จะดึงเฉพาะ <strong>ชื่อพนักงาน</strong> มาเติม — ข้อมูลวันทำงานจะไม่ถูกนำมา</div>
+    <div style="display:flex;gap:8px;margin-top:1rem">
+      <button class="btn bp" onclick="doCopyNames()" style="flex:1">✅ ดึงชื่อ</button>
+      <button class="btn bo" onclick="document.getElementById('copy-modal').style.display='none'" style="flex:1">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TAB 2 : INVOICE ========== -->
+<div id="t2" class="panel">
+  <div class="card no-print">
+    <div class="ch">
+      <div class="ct"><div class="ci">📄</div>ข้อมูล Invoice</div>
+      <button class="btn bp bsm" onclick="printInv()">🖨️ พิมพ์ Invoice</button>
+    </div>
+    <div class="g2">
+      <div class="fg"><label>เลขที่ Invoice</label><input type="text" id="inv-no" placeholder="เช่น CCS-H.OPTICS-SLR-NOV.-1(24)"></div>
+      <div class="fg"><label>วันที่ออก</label><input type="date" id="inv-dt" onchange="autoFillInvNo()" value="2024-11-14"></div>
+      <div class="fg">
+        <label>โรงงาน (Plant)</label>
+        <select id="inv-plant" onchange="onInvPlantChange();autoFillInvNo()">
+          <option value="SLR">HOYA OPTICS SLR</option>
+          <option value="GMO">HOYA OPTICS GMO</option>
+          <option value="PO">HOYA OPTICS PO</option>
+          <option value="HEAD">HEAD OFFICE</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label>แผนก (Department)</label>
+        <select id="inv-dept" onchange="loadTStoInv();autoFillInvNo()"><option value="MAIN">MAIN</option></select>
+      </div>
+      <div class="fg full">
+        <label>ประเภทบริการ</label>
+        <select id="inv-svc">
+          <option>CLEANING WORK SERVICE</option>
+          <option>GARDEN WORK SERVICE</option>
+          <option>DISH WASHING SERVICE</option>
+          <option>CLEANING WORK SERVICE (NIGHT)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="st">💰 ค่าจ้างตามสัญญา</div>
+    <div class="g4">
+      <div class="fg"><label>จำนวนพนักงาน (คน)</label><input type="number" id="i-cnt" value="5" oninput="calcInv()"></div>
+      <div class="fg"><label>อัตรา/คน/เดือน (฿)</label><input type="number" id="i-rate" value="11900" oninput="calcInv()"></div>
+      <div class="fg"><label>วันขาด/หยุด (วัน)</label><input type="number" id="i-abs" value="0" oninput="calcInv()"></div>
+      <div class="fg"><label>อัตรา/วัน (฿) auto</label><input type="number" id="i-drate" readonly></div>
+    </div>
+
+    <div class="st">⏰ OT (คำนวณจากใบบันทึกเวลาอัตโนมัติ)</div>
+    <div class="g4">
+      <div class="fg"><label>OT รวม (ชม. ทศนิยม)</label><input type="number" id="i-oth" value="0" step="0.01" oninput="calcInv()"></div>
+      <div class="fg"><label>จำนวนคน OT</label><input type="number" id="i-otp" value="5" oninput="calcInv()"></div>
+      <div class="fg"><label>อัตรา OT/ชม. (฿)</label><input type="number" id="i-otr" value="74.38" step="0.01" oninput="calcInv()"></div>
+      <div class="fg"><label>รวมค่า OT (฿) auto</label><input type="number" id="i-otamt" readonly></div>
+    </div>
+
+    <div class="st">🎌 วันหยุดนักขัตฤกษ์</div>
+    <div class="g5">
+      <div class="fg"><label>จำนวนคน</label><input type="number" id="i-hp" value="0" oninput="calcInv()"></div>
+      <div class="fg"><label>จำนวนวัน</label><input type="number" id="i-hd" value="0" oninput="calcInv()"></div>
+      <div class="fg"><label>อัตรา/คน/วัน (฿)</label><input type="number" id="i-hr" value="793.34" step="0.01" oninput="calcInv()"></div>
+      <div class="fg"><label>OT วันหยุด (ชม.)</label><input type="number" id="i-hot" value="0" step="0.01" oninput="calcInv()"></div>
+      <div class="fg"><label>รวมค่าวันหยุด (฿) auto</label><input type="number" id="i-holamt" readonly></div>
+    </div>
+
+    <div class="brow">
+      <button class="btn bp" onclick="calcInv()">🔄 คำนวณ</button>
+      <button class="btn ba" onclick="saveInv()">💾 บันทึก Invoice</button>
+      <button class="btn bs" onclick="showInvPreview()">👁️ Preview</button>
+    </div>
+  </div>
+
+  <div class="card" id="inv-preview" style="display:none">
+    <div class="ch no-print">
+      <div class="ct">👁️ Invoice Preview</div>
+      <button class="btn bo bsm no-print" onclick="document.getElementById('inv-preview').style.display='none'">✕</button>
+    </div>
+    <div id="inv-html"></div>
+  </div>
+</div>
+
+<!-- ========== TAB 3 : SUMMARY ========== -->
+<div id="t3" class="panel">
+  <div class="card no-print">
+    <div class="ch">
+      <div class="ct"><div class="ci">📊</div>DEBIT NOTE SUMMARY</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select id="sum-mon" style="padding:5px 9px;border-radius:8px;border:1px solid var(--bord);font-size:12.5px;font-family:'Sarabun',sans-serif">
+          <option>JANUARY 2025</option><option>FEBRUARY 2025</option><option>MARCH 2025</option>
+          <option>APRIL 2025</option><option>MAY 2025</option><option>JUNE 2025</option>
+          <option>JULY 2025</option><option>AUGUST 2025</option><option>SEPTEMBER 2025</option>
+          <option>OCTOBER 2025</option><option selected>NOVEMBER 2025</option><option>DECEMBER 2025</option>
+        </select>
+        <select id="sum-plant" style="padding:5px 9px;border-radius:8px;border:1px solid var(--bord);font-size:12.5px;font-family:'Sarabun',sans-serif">
+          <option value="SLR">HOYA SLR</option>
+          <option value="GMO">HOYA GMO</option>
+          <option value="PO">HOYA PO</option>
+          <option value="HEAD">HEAD OFFICE</option>
+          <option value="ALL">ทุกโรงงาน</option>
+        </select>
+        <button class="btn bp bsm" onclick="buildSum()">สร้าง Summary</button>
+        <button class="btn bp bsm" onclick="showSumPreview()">👁️ Preview / พิมพ์</button>
+        <button class="btn bs bsm" onclick="exportXlsx()">📥 Export Excel</button>
+        <button class="btn bo bsm" onclick="printSum()">🖨️ พิมพ์</button>
+      </div>
+    </div>
+  </div>
+  <div class="card" id="sum-card">
+    <div class="alert ai">💡 บันทึก Invoice ในแท็บ Invoice แล้วกด "สร้าง Summary"</div>
+  </div>
+</div>
+
+<!-- ========== TAB 5 : SPECIAL INVOICE ========== -->
+<div id="t5" class="panel">
+  <div class="card no-print">
+    <div class="ch">
+      <div class="ct"><div class="ci">⭐</div>Special Invoice (กรอกเองอิสระ)</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn bs bsm" onclick="addSpItem()">+ เพิ่มรายการ</button>
+        <button class="btn bp bsm" onclick="showSpPreview()">👁️ Preview</button>
+        <button class="btn ba bsm" onclick="saveSpInv()">💾 บันทึก</button>
+      </div>
+    </div>
+
+    <!-- ข้อมูล Invoice Header -->
+    <div class="g2" style="gap:.75rem">
+      <div class="fg"><label>เลขที่ Invoice</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="sp-no" placeholder="เช่น CCS-H.OPTICS-SLR-SP-NOV.-1(24)" style="flex:1">
+          <button class="btn bo bsm" onclick="document.getElementById('sp-no').value='';autoFillSpNo()" title="สร้างเลขอัตโนมัติ">🔄</button>
+        </div></div>
+      <div class="fg"><label>วันที่ออก</label>
+        <input type="date" id="sp-dt" onchange="autoFillSpNo()"></div>
+      <div class="fg">
+        <label>โรงงาน (Plant)</label>
+        <select id="sp-plant" onchange="onSpPlantChange();setTimeout(autoFillSpNo,50)"></select>
+      </div>
+      <div class="fg">
+        <label>แผนก (Department)</label>
+        <select id="sp-dept" onchange="autoFillSpNo()"></select>
+      </div>
+    </div>
+    <div class="g2" style="gap:.75rem;margin-top:.5rem">
+      <div class="fg full">
+        <label>ประเภทบริการ / หัวข้อ</label>
+        <input type="text" id="sp-title" value="SPECIAL CLEANING WORK SERVICE"
+          placeholder="เช่น SPECIAL CLEANING WORK SERVICE"></div>
+      <div class="fg">
+        <label>ผู้รับ (MESSRS)</label>
+        <input type="text" id="sp-messrs" value="HOYA OPTICS (THAILAND) LTD."
+          placeholder="HOYA OPTICS (THAILAND) LTD."></div>
+    </div>
+
+    <!-- รายการ items -->
+    <div class="st">📋 รายการ (กรอกเองได้ไม่จำกัด)</div>
+    <div id="sp-items-wrap">
+      <!-- rows added dynamically -->
+    </div>
+
+    <!-- ยอดรวม -->
+    <div style="margin-top:1rem;border-top:1px solid var(--bord);padding-top:.75rem">
+      <div style="display:flex;justify-content:flex-end;flex-direction:column;align-items:flex-end;gap:4px">
+        <div style="display:flex;gap:12px;font-size:13.5px">
+          <span style="color:var(--muted)">UP TOTAL</span>
+          <span id="sp-up" style="font-weight:700;min-width:100px;text-align:right">0.00 Baht</span>
+        </div>
+        <div style="display:flex;gap:12px;font-size:13.5px">
+          <span style="color:var(--muted)">VAT 7%</span>
+          <span id="sp-vat" style="font-weight:700;min-width:100px;text-align:right">0.00 Baht</span>
+        </div>
+        <div style="display:flex;gap:12px;font-size:15px;border-top:2px solid var(--navy);padding-top:4px;margin-top:4px">
+          <span style="color:var(--navy);font-weight:700">GRAND TOTAL</span>
+          <span id="sp-grand" style="font-weight:800;color:var(--navy);min-width:100px;text-align:right">0.00 Baht</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview area -->
+  <div class="card" id="sp-preview-card" style="display:none">
+    <div class="ch no-print">
+      <div class="ct">👁️ Special Invoice Preview</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bp bsm" onclick="downloadSpInv()">📥 บันทึกไฟล์ (.html)</button>
+        <button class="btn bo bsm" onclick="document.getElementById('sp-preview-card').style.display='none'">✕ ปิด</button>
+      </div>
+    </div>
+    <div id="sp-preview-html"></div>
+  </div>
+
+  <!-- Saved Special Invoices -->
+  <div class="card no-print">
+    <div class="ch"><div class="ct">📁 Special Invoice ที่บันทึกไว้</div></div>
+    <div id="sp-saved-list"><p style="color:var(--light);font-size:13px;text-align:center;padding:.75rem">ยังไม่มีข้อมูล</p></div>
+  </div>
+</div>
+
+<!-- ========== TAB 6 : ใบกำกับภาษี ========== -->
+<div id="t6" class="panel">
+  <div class="card no-print">
+    <div class="ch">
+      <div class="ct"><div class="ci">🧾</div>ออกใบกำกับภาษี</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+      <span id="ds-layout-badge" style="font-size:12px;color:#8891aa;padding:3px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--bord)">🎨 Layout: ค่าเริ่มต้น</span>
+      <button class="btn bo bsm" onclick="sw('t7',document.querySelectorAll('.tb')[6])">🎨 ปรับแบบฟอร์มใน Designer</button>
+    </div>
+    <div class="alert ai" style="font-size:12.5px">
+      💡 ระบบจะดึง Invoice ทั้งหมดจาก Summary เดือนที่เลือก (รวม Special Invoice) และออกใบกำกับภาษีแยกตามกลุ่มลูกค้าอัตโนมัติ<br>
+      ✏️ กด "ปรับแบบฟอร์ม" → แก้ layout → Save → กลับมา Tab นี้ → ออกใบใหม่จะใช้ layout ที่แก้ไว้ทันที
+    </div>
+    <div class="g2" style="gap:.75rem;align-items:flex-end">
+      <div class="fg">
+        <label>เดือน/ปี</label>
+        <select id="tax-mon" style="padding:8px;border:1px solid var(--bord);border-radius:8px;font-size:13px;font-family:'Sarabun',sans-serif;width:100%"></select>
+      </div>
+      <div class="fg">
+        <label>วันที่ออก</label>
+        <input type="date" id="tax-date" style="padding:8px;border:1px solid var(--bord);border-radius:8px;font-size:13px;width:100%">
+      </div>
+      <div>
+        <button class="btn bp" onclick="genTaxInvoices()">🧾 สร้างใบกำกับภาษี</button>
+      </div>
+    </div>
+  </div>
+  <div id="tax-inv-list"></div>
+</div>
+
+<!-- ========== TAB 4 : SETTINGS ========== -->
+<div id="t4" class="panel">
+
+  <!-- Firebase Config Card -->
+  <div class="card" id="firebase-config-card">
+    <div class="ch">
+      <div class="ct"><div class="ci">🔥</div>เชื่อมต่อ Firebase Database</div>
+      <span id="db-status-badge" style="font-size:12px;padding:3px 10px;border-radius:99px;background:#f0f0f0;color:#666">⚪ ยังไม่ได้เชื่อมต่อ</span>
+    </div>
+    <div class="alert ai" style="font-size:12.5px">
+      💡 ใส่ค่าจาก <strong>Firebase Console → Project Settings → Your apps → Config</strong><br>
+      ข้อมูลจะ sync อัตโนมัติทุกเครื่องที่เปิด — ไม่มี pause ไม่มีค่าใช้จ่ายสำหรับการใช้งานทั่วไป
+    </div>
+    <div class="g3" style="gap:.75rem">
+      <div class="fg">
+        <label>API Key</label>
+        <input type="text" id="fb-apikey" placeholder="AIzaSy..." oninput="saveFBConfig()">
+      </div>
+      <div class="fg">
+        <label>Project ID</label>
+        <input type="text" id="fb-projectid" placeholder="ccs-invoice-xxxxx" oninput="saveFBConfig()">
+      </div>
+      <div class="fg">
+        <label>App ID</label>
+        <input type="text" id="fb-appid" placeholder="1:123456:web:abc..." oninput="saveFBConfig()">
+      </div>
+    </div>
+    <div class="brow">
+      <button class="btn bp bsm" onclick="initFirebase()">🔥 เชื่อมต่อ Firebase</button>
+      <button class="btn bs bsm" onclick="dbLoad()">🔄 โหลดข้อมูลจาก DB</button>
+      <button class="btn bo bsm" onclick="dbBackupAll()">📦 Backup ข้อมูลปัจจุบัน → DB</button>
+    </div>
+  </div>
+
+  <!-- Customer Branches Card -->
+  <div class="card">
+    <div class="ch">
+      <div class="ct"><div class="ci">🏭</div>ข้อมูลลูกค้า HOYA — แต่ละกลุ่ม/สาขา</div>
+      <button class="btn bp bsm" onclick="saveCustomers()">💾 บันทึก</button>
+    </div>
+    <div class="alert ai" style="font-size:12.5px">💡 กำหนดที่อยู่ลูกค้าแต่ละกลุ่ม — กลุ่มเดียวกัน = Summary เดียวกัน = ออกใบกำกับภาษีชุดเดียวกัน</div>
+    <div style="margin-bottom:.75rem">
+      <div class="g2" style="gap:.5rem;margin-bottom:.5rem;background:var(--surf2);padding:8px 10px;border-radius:var(--r)">
+        <span style="font-size:12px;font-weight:600;color:var(--navy)">เลขที่เอกสารใบกำกับภาษี (CS XXXXXXX)</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" id="tax-prefix" value="CS" style="width:60px;padding:5px;border:1px solid var(--bord);border-radius:6px;font-size:13px">
+          <input type="number" id="tax-start" placeholder="เช่น 1198" style="width:100px;padding:5px;border:1px solid var(--bord);border-radius:6px;font-size:13px">
+          <button class="btn bo bsm" onclick="saveTaxCounter()">ตั้งค่า</button>
+          <span id="tax-counter-preview" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+      </div>
+      <div id="customers-wrap"></div>
+      <button class="btn ba bsm" onclick="addCustomerGroup()" style="margin-top:6px">+ เพิ่มกลุ่ม</button>
+    </div>
+    <!-- Plant → Group mapping -->
+    <div class="st">🔗 Map โรงงาน → กลุ่มลูกค้า</div>
+    <div id="plant-group-wrap" style="font-size:13px"></div>
+  </div>
+
+  <!-- Company Info Card -->
+  <div class="card">
+    <div class="ch">
+      <div class="ct"><div class="ci">🏢</div>ข้อมูลบริษัท (แสดงใน Invoice &amp; Summary)</div>
+      <button class="btn bp bsm" onclick="saveCompanyInfo()">💾 บันทึก</button>
+    </div>
+    <div class="g2" style="gap:.875rem;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <div class="fg"><label>ชื่อบริษัท (ไทย)</label>
+          <input type="text" id="co-name-th" value="ห้างหุ้นส่วนจำกัด เชียงใหม่ คลีนนิ่ง แอนด์ ซัพพลาย เซอร์วิส"></div>
+        <div class="fg"><label>ชื่อบริษัท (อังกฤษ)</label>
+          <input type="text" id="co-name-en" value="CHIANGMAI CLEANING AND SUPPLY SERVICE PART., LTD."></div>
+        <div class="fg"><label>ที่อยู่</label>
+          <input type="text" id="co-addr" value="159 ม.11 ต.หนองจาก อ.สันทราย จ.เชียงใหม่ 50290"></div>
+        <div class="fg"><label>โทรศัพท์</label>
+          <input type="text" id="co-tel" value="081-2879000"></div>
+        <div class="fg"><label>อีเมล</label>
+          <input type="text" id="co-email" value="CLEANING_CCS@HOTMAIL.COM"></div>
+        <div class="fg"><label>เลขที่ภาษี (TAX No.)</label>
+          <input type="text" id="co-tax" value="0503554005172"></div>
+        <div class="fg"><label>ผู้ติดต่อ / ผู้ลงนาม</label>
+          <input type="text" id="co-contact" value="(MISS. MONTIRA YAINTHORN)"></div>
+      </div>
+      <!-- Logo preview -->
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Logo บริษัท</label>
+        <div id="co-logo-preview" style="width:120px;height:120px;border:2px dashed var(--bord);border-radius:var(--r);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--surf2)">
+          <!-- Default CCS logo SVG -->
+          <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="width:110px;height:110px">
+            <circle cx="60" cy="60" r="55" fill="#c8006a" opacity=".15"/>
+            <circle cx="60" cy="60" r="42" fill="none" stroke="#c8006a" stroke-width="3"/>
+            <text x="60" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="36" font-weight="900" fill="#c8006a">CCS</text>
+          </svg>
+        </div>
+        <div>
+          <label class="btn bo bsm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+            🖼️ เลือก Logo
+            <input type="file" id="co-logo-file" accept="image/*" style="display:none" onchange="loadLogo(this)">
+          </label>
+          <button class="btn bo bsm" onclick="resetLogo()" style="margin-top:4px">↺ รีเซ็ต</button>
+        </div>
+        <div class="alert ai" style="font-size:11.5px;padding:8px 10px">💡 รองรับ PNG, JPG, SVG<br>แนะนำขนาด 200×200px</div>
+      </div>
+    </div>
+    <!-- Preview letterhead -->
+    <div class="st">👁️ Preview หัวจดหมาย</div>
+    <div id="co-letterhead-preview" style="border:1px solid var(--bord);border-radius:var(--r);padding:12px;background:#fff;margin-top:.5rem">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch"><div class="ct"><div class="ci">⚙️</div>ตั้งค่าอัตราค่าจ้าง — โรงงาน &amp; แผนก</div></div>
+    <div class="alert ai">💡 เพิ่ม/ลบโรงงานและแผนกได้ตามต้องการ การเปลี่ยนแปลงจะอัปเดต dropdown ทุกที่ในระบบทันที</div>
+
+    <!-- Add Plant -->
+    <div class="st">🏭 เพิ่มโรงงานใหม่</div>
+    <div class="g2" style="gap:.75rem;align-items:end">
+      <div class="fg"><label>รหัสโรงงาน (ภาษาอังกฤษ เช่น FAC1)</label><input type="text" id="new-plant-id" placeholder="เช่น LAB" style="text-transform:uppercase"></div>
+      <div class="fg"><label>ชื่อโรงงาน</label><input type="text" id="new-plant-name" placeholder="เช่น HOYA LAB"></div>
+    </div>
+    <div class="brow" style="margin-top:.5rem">
+      <button class="btn ba bsm" onclick="addPlant()">+ เพิ่มโรงงาน</button>
+    </div>
+
+    <div class="st">🏗️ โรงงานและแผนกทั้งหมด</div>
+    <div id="fac-cfg"></div>
+    <div class="brow"><button class="btn bp" onclick="saveCfg()">💾 บันทึกการตั้งค่า</button></div>
+  </div>
+  <div class="card">
+    <div class="ch"><div class="ct">📁 Invoice ที่บันทึกไว้</div></div>
+    <div id="inv-list"><p style="color:var(--light);font-size:13px">ยังไม่มี Invoice</p></div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<script>function sw(id,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  btn.classList.add('on');
+  if(id==='t3') buildSum();
+  if(id==='t6'){ initTaxMonDropdown(); var n=localStorage.getItem('ds_layout_name'); if(n){var b=document.getElementById('ds-layout-badge');if(b) b.textContent='🎨 Layout: '+n;} }
+
+  // ซ่อน/แสดง zoom slider ตาม tab
+  const zf=document.getElementById('ts-zoom-fixed');
+  if(zf) zf.style.display=(id==='t1'&&document.querySelector('#ts-out .att-outer'))?'flex':'none';
+}
+
+
+/* ============================================================
+   MASTER CONFIG — โรงงาน → แผนก
+   ============================================================ */
+const PLANTS = {
+  SLR: {
+    name: 'HOYA OPTICS SLR',
+    depts: {
+      MAIN:    { name:'MAIN (Cleaning)',  workers:5,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+      GRD:     { name:'GRD (Garden)',     workers:1,  rate:7250,  ot_rate:85.72, hol_rate:914.34 },
+      SOTO:    { name:'SOTOMARI',         workers:1,  rate:11900, ot_rate:70.63, hol_rate:793.34 },
+      NIGHT:   { name:'NIGHT',            workers:2,  rate:11900, ot_rate:74.38, hol_rate:753.34 },
+      DISHWASH:{ name:'DISH WASH',        workers:1,  rate:11900, ot_rate:70.63, hol_rate:753.34 },
+      PACKDAY: { name:'PACK DAY',         workers:4,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+    }
+  },
+  GMO: {
+    name: 'HOYA OPTICS GMO',
+    depts: {
+      MAIN:    { name:'MAIN (Cleaning)',  workers:3,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+      PRESS:   { name:'PRESS',            workers:1,  rate:11900, ot_rate:70.63, hol_rate:793.34 },
+      GRD:     { name:'GRD (Garden)',     workers:1,  rate:7250,  ot_rate:85.72, hol_rate:914.34 },
+      SOTO:    { name:'SOTOMARI',         workers:1,  rate:11900, ot_rate:70.63, hol_rate:793.34 },
+      NIGHT:   { name:'NIGHT',            workers:2,  rate:11900, ot_rate:74.38, hol_rate:753.34 },
+      DISHWASH:{ name:'DISH WASH',        workers:1,  rate:11900, ot_rate:70.63, hol_rate:753.34 },
+      PACKDAY: { name:'PACK DAY (ล้าง)',  workers:4,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+    }
+  },
+  PO: {
+    name: 'HOYA OPTICS PO',
+    depts: {
+      MAIN:    { name:'MAIN (Cleaning)',  workers:4,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+      CANTEEN: { name:'CANTEEN',          workers:1,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+      GRD:     { name:'GRD (Garden)',     workers:1,  rate:7250,  ot_rate:85.72, hol_rate:914.34 },
+      SOTO:    { name:'SOTOMARI',         workers:1,  rate:11900, ot_rate:70.63, hol_rate:793.34 },
+      NIGHT:   { name:'NIGHT',            workers:2,  rate:11900, ot_rate:74.38, hol_rate:753.34 },
+      RP:      { name:'RP',               workers:2,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+    }
+  },
+  HEAD: {
+    name: 'HEAD OFFICE',
+    depts: {
+      MAIN:    { name:'MAIN',             workers:1,  rate:11900, ot_rate:74.38, hol_rate:793.34 },
+    }
+  }
+};
+
+/* Working copy that can be edited via settings */
+let CFG = JSON.parse(JSON.stringify(PLANTS));
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const S = { timesheets:[], invoices:[] };
+
+/* ── Customer branches (HOYA) — map group → address ── */
+let CUSTOMERS = {
+  1: { name:'HOYA OPTICS (THAILAND) LTD.', branch:'สำนักงานใหญ่',
+       addr:'60/31 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+       taxId:'0515541000055', branchCode:'' },
+  2: { name:'HOYA OPTICS (THAILAND) LTD.', branch:'สาขา 0002',
+       addr:'60/32 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+       taxId:'0515541000055', branchCode:'0002' },
+  3: { name:'HOYA OPTICS (THAILAND) LTD.', branch:'สาขา 0001',
+       addr:'NRIE 68/4 MOO.4 TAMBOL BANKLANG AMPHUR MUANG LAMPHUN 51000',
+       taxId:'0515541000055', branchCode:'0001' },
+  4: { name:'HOYA OPTICS (THAILAND) LTD.', branch:'สาขา 0003',
+       addr:'296 MOO.13 TAMBOL MAKHUAJAE AMPHUR MUANG LAMPHUN 51000',
+       taxId:'0515541000055', branchCode:'0003' },
+};
+
+/* map plant → customer group */
+let PLANT_GROUP = { PO:1, HEAD:1, RP:2, GMO:3, SLR:4 };
+
+/* Tax invoice running number — กรอกเลขเริ่มต้นใน Settings */
+let TAX_INV_COUNTER = parseInt(localStorage.getItem('tax_inv_counter')||'1');
+let TAX_INV_PREFIX  = localStorage.getItem('tax_inv_prefix')||'CS';
+
+function getNextTaxNo(){
+  const no = TAX_INV_PREFIX + ' ' + String(TAX_INV_COUNTER).padStart(7,'0');
+  TAX_INV_COUNTER++;
+  localStorage.setItem('tax_inv_counter', TAX_INV_COUNTER);
+  return no;
+}
+function resetTaxCounter(start){
+  TAX_INV_COUNTER=parseInt(start)||1;
+  localStorage.setItem('tax_inv_counter', TAX_INV_COUNTER);
+}
+
+/* ── Company Info ── */
+let CO = {
+  nameTh: 'ห้างหุ้นส่วนจำกัด เชียงใหม่ คลีนนิ่ง แอนด์ ซัพพลาย เซอร์วิส',
+  nameEn: 'CHIANGMAI CLEANING AND SUPPLY SERVICE PART., LTD.',
+  addr:   '159 ม.11 ต.หนองจาก อ.สันทราย จ.เชียงใหม่ 50290',
+  tel:    '081-2879000',
+  email:  'CLEANING_CCS@HOTMAIL.COM',
+  tax:    '0503554005172',
+  contact:'(MISS. MONTIRA YAINTHORN)',
+  logoData: null   // base64 image data
+};
+
+function saveCompanyInfo(){
+  CO.nameTh  = document.getElementById('co-name-th').value;
+  CO.nameEn  = document.getElementById('co-name-en').value;
+  CO.addr    = document.getElementById('co-addr').value;
+  CO.tel     = document.getElementById('co-tel').value;
+  CO.email   = document.getElementById('co-email').value;
+  CO.tax     = document.getElementById('co-tax').value;
+  CO.contact = document.getElementById('co-contact').value;
+  renderLetterheadPreview();
+  alert('✅ บันทึกข้อมูลบริษัทแล้ว');
+}
+
+function loadLogo(input){
+  const file=input.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    CO.logoData=e.target.result;
+    const prev=document.getElementById('co-logo-preview');
+    if(prev) prev.innerHTML=`<img src="${CO.logoData}" style="max-width:110px;max-height:110px;object-fit:contain">`;
+    renderLetterheadPreview();
+  };
+  reader.readAsDataURL(file);
+}
+
+function resetLogo(){
+  CO.logoData=null;
+  const prev=document.getElementById('co-logo-preview');
+  if(prev) prev.innerHTML=`<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" style="width:110px;height:110px">
+    <circle cx="60" cy="60" r="55" fill="#c8006a" opacity=".15"/>
+    <circle cx="60" cy="60" r="42" fill="none" stroke="#c8006a" stroke-width="3"/>
+    <text x="60" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="36" font-weight="900" fill="#c8006a">CCS</text>
+  </svg>`;
+  renderLetterheadPreview();
+}
+
+/* สร้าง HTML letterhead สำหรับใส่ใน Invoice/Summary */
+function getLetterheadHTML(forPrint=false){
+  const logoSrc = CO.logoData || `data:image/svg+xml,${encodeURIComponent('<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><circle cx="60" cy="60" r="55" fill="%23c8006a" opacity=".15"/><circle cx="60" cy="60" r="42" fill="none" stroke="%23c8006a" stroke-width="3"/><text x="60" y="72" text-anchor="middle" font-family="Arial,sans-serif" font-size="36" font-weight="900" fill="%23c8006a">CCS</text></svg>')}`;
+  const fs = forPrint ? '9pt' : '13px';
+  const fsLg = forPrint ? '11pt' : '15px';
+  const fsSm = forPrint ? '8pt' : '11.5px';
+  return `<div style="display:flex;align-items:center;gap:14px;padding-bottom:10px;margin-bottom:10px;border-bottom:2px solid #c8006a;font-family:'Sarabun',sans-serif">
+    <img src="${logoSrc}" style="width:${forPrint?'55pt':'70px'};height:${forPrint?'55pt':'70px'};object-fit:contain;flex-shrink:0">
+    <div style="flex:1">
+      <div style="font-size:${fsLg};font-weight:700;color:#c8006a;line-height:1.3">${CO.nameTh}</div>
+      <div style="font-size:${fsSm};color:#555;margin-top:2px">${CO.addr}</div>
+      <div style="font-size:${fsSm};color:#555">โทร. ${CO.tel} &nbsp; Email : ${CO.email}</div>
+    </div>
+  </div>`;
+}
+
+function renderLetterheadPreview(){
+  const el=document.getElementById('co-letterhead-preview');
+  if(el) el.innerHTML=getLetterheadHTML(false);
+}
+
+let regRows = [];
+let subRows = [];
+let holidays = []; // Array of 'YYYY-MM-DD' strings
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function getDates(ds,de){
+  const arr=[],s=new Date(ds),e=new Date(de);
+  let c=new Date(s);
+  while(c<=e){arr.push(new Date(c));c.setDate(c.getDate()+1)}
+  return arr;
+}
+function isSunday(d){return d.getDay()===0}
+function isWeekend(d){return d.getDay()===0||d.getDay()===6}
+function isHoliday(d){ return holidays.includes(d.toISOString().slice(0,10)) }
+function fmtDay(d){return d.getDate()}
+function fmt(n){return (+n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+/* parse "D.HMM" → minutes; display helper */
+function parseWorkToMin(v){
+  if(!v||v.trim()===''||/^[A-Za-z]$/.test(v.trim())) return 0;
+  const n=parseFloat(v);
+  if(isNaN(n)||n<0) return 0;
+  const intPart=Math.floor(n);
+  const decStr=n.toFixed(3).slice(2); // "345","715","000"
+  const hh=parseInt(decStr.slice(0,1)||'0');
+  const mm=parseInt(decStr.slice(1,3)||'0');
+  return intPart*480 + hh*60 + mm;
+}
+function minToDisplay(m){
+  if(m<=0) return '';
+  const d=Math.floor(m/480);
+  const rem=m%480;
+  const h=Math.floor(rem/60);
+  const mn=rem%60;
+  if(h===0&&mn===0) return String(d);
+  const decPart = mn===0 ? String(h) : String(h)+(mn<10?'0'+mn:String(mn));
+  return d+'.'+decPart;
+}
+/* format OT hours — trim trailing zeros after decimal */
+function fmtOT(n){
+  if(!n||n<=0) return '-';
+  // remove trailing zeros: 4.50 → 4.5, 4.00 → 4
+  const s=n.toFixed(2).replace(/\.?0+$/,'');
+  return s||'0';
+}
+function parseWorkVal(v){
+  const m=parseWorkToMin(v);
+  return {days:Math.floor(m/480),hrs:(m%480)/60};
+}
+
+/* Sum work values across a row's days (skip letter codes) */
+function sumRowWork(row){
+  let totalDays=0, totalHrs=0;
+  Object.entries(row.days).forEach(([k,v])=>{
+    if(!v||v.trim()==='') return;
+    const vt = v.trim();
+    if(/^[A-Z]$/i.test(vt)) return; // skip letter substitutes
+    const {days,hrs} = parseWorkVal(vt);
+    totalDays += days;
+    totalHrs += hrs;
+  });
+  return {days:totalDays, hrs:totalHrs};
+}
+
+/* Sum OT values in a row — OT stored per cell as "otVal" */
+function sumRowOT(row){
+  let total=0;
+  Object.values(row.otDays||{}).forEach(v=>{
+    const n=parseFloat(v)||0; total+=n;
+  });
+  return total;
+}
+
+/* tabs */
+
+
+/* ============================================================
+   PLANT / DEPT SELECTS
+   ============================================================ */
+function getDeptOptions(plant){
+  const depts = (CFG[plant]||{}).depts||{};
+  return Object.entries(depts).map(([k,d])=>`<option value="${k}">${d.name}</option>`).join('');
+}
+
+function onPlantChange(){
+  const plant=document.getElementById('tf-plant').value;
+  document.getElementById('tf-dept').innerHTML=getDeptOptions(plant);
+  onDeptChange();
+}
+
+function onDeptChange(){
+  const plant=document.getElementById('tf-plant').value;
+  const dept=document.getElementById('tf-dept').value;
+  const cfg=(CFG[plant]?.depts?.[dept])||{};
+  initRows(cfg.workers||3, 8);
+  buildGrid();
+}
+function onInvPlantChange(){
+  const plant=document.getElementById('inv-plant').value;
+  document.getElementById('inv-dept').innerHTML=getDeptOptions(plant);
+  loadTStoInv();
+}
+
+/* ============================================================
+   HOLIDAYS
+   ============================================================ */
+function addHoliday(){
+  const d=document.getElementById('hday-input').value;
+  if(!d) return;
+  if(!holidays.includes(d)) holidays.push(d);
+  document.getElementById('hday-input').value='';
+  renderHolidays();
+  buildGridKeepData();
+}
+function removeHoliday(d){
+  holidays=holidays.filter(x=>x!==d);
+  renderHolidays();
+  buildGridKeepData();
+}
+/* buildGrid แต่ไม่เคลียร์ data (ใช้เมื่อแค่เปลี่ยนวันหยุด) */
+function buildGridKeepData(){
+  const savedDS=_lastDS, savedDE=_lastDE;
+  buildGrid();
+  // force recalc ทุกแถวหลัง rebuild เพื่ออัปเดต H, OT.H, Total ตาม holiday ใหม่
+  regRows.forEach((_,i)=>recalcRow(regRows,i,null));
+  subRows.forEach((_,i)=>recalcRow(subRows,i,null));
+}
+function renderHolidays(){
+  const el=document.getElementById('holiday-list');
+  if(!holidays.length){el.innerHTML='<span style="color:var(--light);font-size:12px">ยังไม่มีวันหยุดพิเศษ</span>';return;}
+  el.innerHTML=holidays.sort().map(d=>`
+    <span style="background:var(--goldbg);border:1px solid #e0b060;border-radius:6px;padding:3px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px">
+      🎌 ${d}
+      <button onclick="removeHoliday('${d}')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:12px;padding:0;line-height:1">✕</button>
+    </span>`).join('');
+}
+
+/* ============================================================
+   ROW MANAGEMENT
+   ============================================================ */
+function initRows(nReg,nSub){
+  regRows=Array.from({length:nReg},()=>({name:'',days:{},otDays:{},ot:'',h:'',oth:'',total:''}));
+  subRows=Array.from({length:nSub},(_,i)=>({letter:String.fromCharCode(65+i),name:'',days:{},otDays:{},ot:'',h:'',oth:'',total:''}));
+}
+function addRow(type){
+  if(type==='reg') regRows.push({name:'',days:{},otDays:{},ot:'',h:'',oth:'',total:''});
+  else subRows.push({letter:String.fromCharCode(65+subRows.length),name:'',days:{},otDays:{},ot:'',h:'',oth:'',total:''});
+  buildGrid();
+}
+function removeRow(type){
+  if(type==='reg'&&regRows.length>1) regRows.pop();
+  else if(type==='sub'&&subRows.length>0) subRows.pop();
+  buildGrid();
+}
+
+/* ============================================================
+   BUILD ATTENDANCE GRID
+   ============================================================ */
+let _lastDS='', _lastDE='';
+function buildGrid(){
+  const ds=document.getElementById('tf-ds').value;
+  const de=document.getElementById('tf-de').value;
+  const plant=document.getElementById('tf-plant').value;
+  const dept=document.getElementById('tf-dept').value;
+  if(!ds||!de) return;
+  // If date range changed → clear days/otDays but keep names
+  if(ds!==_lastDS||de!==_lastDE){
+    [...regRows,...subRows].forEach(r=>{r.days={};r.otDays={};r.ot='';r.h='';r.oth='';r.total='';r.totalMin=0;r.starOn=undefined;});
+    _lastDS=ds; _lastDE=de;
+  }
+  const dates=getDates(ds,de);
+
+  const plantName=(CFG[plant]||{}).name||plant;
+  const deptName=(CFG[plant]?.depts?.[dept]?.name)||dept;
+
+  const ds_th=new Date(ds).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  const de_th=new Date(de).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+
+  /* header columns */
+  function colClass(d){
+    if(isSunday(d)) return 'wknd';
+    if(isHoliday(d)) return 'hday';
+    return '';
+  }
+  function tdClass(d){
+    if(isSunday(d)) return 'wknd-cell';
+    if(isHoliday(d)) return 'hday-cell';
+    return '';
+  }
+
+  let hdr=`<tr>
+    <th class="no-col" style="min-width:26px;background:#bfbfbf;color:#000">No.</th>
+    <th style="min-width:155px;text-align:center;padding-left:6px;background:#bfbfbf;color:#000;line-height:1.4;font-size:13.5px">
+      ชื่อ - นามสกุล
+    </th>
+    <th style="width:22px;min-width:22px;background:#bfbfbf;color:#000;font-size:8px;line-height:1.6;padding:2px 1px;text-align:center">
+    </th>`;
+  dates.forEach((d,di)=>{
+    const cls=colClass(d);
+    const mo=d.toLocaleDateString('th-TH',{month:'short'});
+    // สีหัวตาราง: วันธรรมดา = เทา 25%, อาทิตย์ = เทาเข้มขึ้น, หยุดพิเศษ = เทาอมเหลือง — ตัวอักษรดำทั้งหมด
+    let thBg='#bfbfbf', thColor='#000000';
+    if(isSunday(d)){thBg='#a8a8a8';thColor='#000000';}
+    else if(isHoliday(d)){thBg='#c8b88c';thColor='#000000';}
+    hdr+=`<th class="${cls}" style="width:28px;min-width:28px;padding:5px 0;line-height:1.3;background:${thBg};color:${thColor};font-size:16px;font-weight:700">${fmtDay(d)}<br><span style="font-size:12px;font-weight:500;opacity:.85">${mo}</span></th>`;
+  });
+  hdr+=`<th style="min-width:42px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">O.T.</th>`;
+  hdr+=`<th style="min-width:30px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">H</th>`;
+  hdr+=`<th style="min-width:42px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">O.T.H</th>`;
+  hdr+=`<th style="min-width:44px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">Total</th></tr>`;
+  const hdr2='';
+
+  /* sub-section divider row (พนักงานแทน) */
+  function subHdr(label){
+    let h=`<tr class="sub-hdr" style="height:36px"><td class="no-col">No.</td><td class="nm" style="text-align:center;font-size:13.5px">${label}</td><td></td>`;
+    dates.forEach(d=>{
+      const tc=tdClass(d);
+      let bgColor='#bfbfbf';
+      if(tc==='wknd-cell') bgColor='#a8a8a8';
+      else if(tc==='hday-cell') bgColor='#c8b88c';
+      const mo=d.toLocaleDateString('th-TH',{month:'short'});
+      h+=`<td class="${tc}" style="font-size:16px;font-weight:700;background:${bgColor}!important;color:#000000!important;line-height:1.3;padding:4px 0;width:38px;min-width:38px">${fmtDay(d)}<br><span style="font-size:12px;font-weight:500;opacity:.85;display:block;text-align:center">${mo}</span></td>`;
+    });
+    h+=`<td style="min-width:42px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">O.T.</td>`;
+    h+=`<td style="min-width:30px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">H</td>`;
+    h+=`<td style="min-width:42px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">O.T.H</td>`;
+    h+=`<td style="min-width:44px;background:#bfbfbf;color:#000000;font-size:13px;font-weight:700">Total</td></tr>`;
+    return h;
+  }
+
+  /* data rows */
+  function buildDataRows(rows, isReg){
+    return rows.map((row,i)=>{
+      // Calculate absent count for * marker
+      function getAbsent(r,dates){
+        let absent=0, worked=0;
+        dates.forEach(d=>{
+          if(isSunday(d)||isHoliday(d)) return;
+          const k=d.toISOString().slice(0,10);
+          const v=(r.days[k]||'').trim();
+          if(v==='') absent++; else worked++;
+        });
+        return {absent, worked};
+      }
+      const {absent, worked: workedDays}=isReg?getAbsent(row,dates):{absent:0,workedDays:0};
+      // ★ ต้องมีข้อมูล (workedDays>0) และ ขาดไม่เกิน 3 วัน
+      const canStar=isReg && workedDays>0 && absent<=3;
+      if(isReg&&!canStar) row.starOn=false;
+      const starOn=isReg?(row.starOn!==undefined?row.starOn:canStar):false;
+      row.starOn=isReg?(starOn&&canStar):false;
+      const label=isReg?(i+1)+(row.starOn?'*':''):'';
+      const subLabel=isReg?'':row.letter;
+      const arrName=isReg?'regRows':'subRows';
+      let html=`<tr>
+        <td class="no-col" style="font-weight:700;font-size:11px;cursor:${isReg?'pointer':'default'}"
+          title="${isReg?`คลิกเพื่อเพิ่ม/ลบ * (★=คิดเต็ม, ขาด≤3วัน | ไม่มี*=คิดรายวัน, ขาด>3วัน)  ขาด: ${getAbsent?.(row,dates)??'?'} วัน`:''}"  
+          onclick="${isReg?`toggleStar(${i})`:''}">
+          ${isReg?label:subLabel}
+        </td>
+        <td class="nm"><input class="nm-in" type="text" placeholder="${isReg?'ชื่อ-นามสกุล '+(i+1):row.letter}" value="${row.name}"
+          oninput="${arrName}[${i}].name=this.value"></td>
+        <td style="width:22px;min-width:22px;background:#1a1a2a;text-align:center;vertical-align:middle;padding:1px">
+          <span style="color:#ff9090;font-weight:700;font-size:8px;display:block;line-height:1.5">OT</span>
+          <span style="color:#7ec8f0;font-weight:700;font-size:8px;display:block;line-height:1.5">W</span>
+        </td>`;
+      dates.forEach((d,di)=>{
+        const key=d.toISOString().slice(0,10);
+        const tc=tdClass(d);
+        const val=row.days[key]||'';
+        const otVal=row.otDays?.[key]||'';
+        html+=`<td class="${tc}" data-key="${key}" style="padding:1px 0">
+          <div class="cell-wrap">
+            <div class="cell-ot" style="display:flex;align-items:center;justify-content:flex-end;padding-right:1px">
+              <input class="dc dc-ot-in" type="text" maxlength="5" title="OT (ชม.)" value="${otVal}"
+                style="width:34px;font-size:9px;color:#c8060a;border-color:#ffcccc;text-align:right"
+                onblur="if(this.value.startsWith('.')){this.value='0'+this.value;setOtDay(${arrName},${i},'${key}',this.value)}" oninput="setOtDay(${arrName},${i},'${key}',this.value);recalcRow(${arrName},${i},this)">
+            </div>
+            <div class="cell-day" style="display:flex;align-items:center;justify-content:center">
+              <input class="dc" type="text" maxlength="6" value="${val}"
+                style="width:34px;text-align:center"
+                onblur="if(this.value.startsWith('.')){this.value='0'+this.value;setDay(${arrName},${i},'${key}',this.value)}" oninput="setDay(${arrName},${i},'${key}',this.value);recalcRow(${arrName},${i},this)">
+            </div>
+          </div>
+        </td>`;
+      });
+      html+=`
+        <td class="ot-col"><span id="ot-${isReg?'r':'s'}-${i}" style="font-weight:700">${row.ot||'-'}</span></td>
+        <td class="h-col"><span id="h-${isReg?'r':'s'}-${i}">${row.h||'-'}</span></td>
+        <td class="oth-col"><span id="oth-${isReg?'r':'s'}-${i}" style="color:#9b1c7c">${row.oth||'-'}</span></td>
+        <td class="ttl-col"><span id="tot-${isReg?'r':'s'}-${i}">${row.total||'-'}</span></td>
+      </tr>`;
+      return html;
+    }).join('');
+  }
+
+  /* total row — sum minutes per group */
+  function totRow(rows,grpId){
+    const sumMin=rows.reduce((s,r)=>s+(r.totalMin||0),0);
+    const tTot=minToDisplay(sumMin);
+    const tOT=rows.reduce((s,r)=>s+(parseFloat(r.ot)||0),0);
+    const tH=rows.reduce((s,r)=>s+(parseInt(r.h)||0),0);
+    const tOTH=rows.reduce((s,r)=>s+(parseFloat(r.oth)||0),0);
+    let html=`<tr class="tot-row"><td></td><td class="nm" style="text-align:center;font-weight:800;font-size:14px">รวม</td><td></td>`;
+    dates.forEach(()=>html+=`<td></td>`);
+    html+=`<td id="tot-ot-${grpId}">${fmtOT(tOT)}</td>`;
+    html+=`<td id="tot-h-${grpId}">${tH>0?tH:'-'}</td>`;
+    html+=`<td id="tot-oth-${grpId}">${fmtOT(tOTH)}</td>`;
+    html+=`<td id="tot-total-${grpId}" style="font-weight:800;font-size:11.5px">${tTot}</td></tr>`;
+    return html;
+  }
+
+  // วันที่ภาษาไทยเต็มรูปแบบ พ.ศ.
+  const ds_full=new Date(ds).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  const de_full=new Date(de).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  const html=`
+  <div class="ts-grid-header" style="text-align:center;margin-bottom:12px;font-family:'Sarabun',sans-serif">
+    <div style="font-size:20px;font-weight:700">HOYA OPTICS (THAILAND) LTD.</div>
+    <div style="font-size:17px;font-weight:600">ใบบันทึกเวลาทำงานของพนักงาน CCS</div>
+    <div style="font-size:14px;margin-top:4px">
+      <strong>${plantName} — ${deptName}</strong>
+      &nbsp;|&nbsp; ประจำวันที่ ${ds_full} ถึง ${de_full}
+    </div>
+  </div>
+  <div class="att-outer">
+  <table class="att">
+    <thead>${hdr}${hdr2}</thead>
+    <tbody>
+      ${buildDataRows(regRows,true)}
+      ${totRow(regRows,"reg")}
+      ${subHdr('ชื่อ - นามสกุล (พนักงานแทน, สำรอง)')}
+      ${buildDataRows(subRows,false)}
+      ${totRow(subRows,"sub")}
+      <tr class="remark-row"><td colspan="${dates.length+6}" style="padding:4px 7px"><span style="font-weight:600">หมายเหตุ :</span> <input type="text" id="ts-remark" style="border:none;border-bottom:1px solid #aaa;width:calc(100% - 80px);background:transparent;font-family:Sarabun,sans-serif;font-size:11px;padding:1px 4px" placeholder="..........................................................................................................................."></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:6px;padding:0 4px">
+    <span style="margin-right:16px">🔵 <em>วันหยุดอาทิตย์</em></span>
+    <span>🟡 <em>วันหยุดพิเศษที่กำหนด</em></span>
+  </div>`;
+
+  // บันทึก focus ก่อน rebuild
+  const _focusEl=document.activeElement;
+  const _focusKey=_focusEl?.closest?.('td')?.dataset?.key||null;
+  const _focusIsOt=_focusEl?.classList?.contains('dc-ot-in')||false;
+  const _focusTr=_focusEl?.closest?.('tr');
+  const _focusRowIdx=_focusTr?Array.from(document.querySelectorAll('#ts-out tbody tr')).indexOf(_focusTr):-1;
+  const _focusColIdx=_focusEl?.closest?.('td')?
+    Array.from(_focusTr?.querySelectorAll('td')||[]).indexOf(_focusEl.closest('td')):-1;
+
+  document.getElementById('ts-out').innerHTML=html;
+
+  // restore focus หลัง rebuild
+  if(_focusKey!==null&&_focusRowIdx>=0){
+    setTimeout(()=>{
+      const rows=document.querySelectorAll('#ts-out tbody tr');
+      const row=rows[_focusRowIdx];
+      if(row){
+        const tds=row.querySelectorAll('td');
+        const td=tds[_focusColIdx];
+        if(td){
+          const inp=_focusIsOt
+            ? td.querySelector('input.dc-ot-in')
+            : td.querySelector('input.dc:not(.dc-ot-in)');
+          if(inp){inp.focus();}
+        }
+      }
+    },20);
+  }
+
+  const curZ=document.getElementById('ts-zoom')?.value||100;
+  applyZoom(curZ);
+  setTimeout(initScrollSync,150);
+}
+
+/* ============================================================
+   CELL VALUE SETTERS + RECALC
+   ============================================================ */
+function setDay(arr,idx,key,val){
+  arr[idx].days[key]=val;
+  // ถ้าเป็น sub row → rebuild mapping ทั้งวัน
+  if(arr===subRows) rebuildSubFill(key);
+}
+function setOtDayOrig(arr,idx,key,val){ if(!arr[idx].otDays) arr[idx].otDays={}; arr[idx].otDays[key]=val; }
+
+/* rebuildSubFill: rebuild ตัวอักษรพนักงานแทนใน reg rows สำหรับวันนั้น */
+function rebuildSubFill(dateKey){
+  const d=new Date(dateKey);
+  if(isSunday(d)||isHoliday(d)) return; // เฉพาะวันทำงานปกติ
+
+  // 1. ลบตัวอักษรทั้งหมดของ sub ออกจาก reg ก่อน
+  const subLetters=new Set(subRows.map(r=>r.letter));
+  regRows.forEach(r=>{
+    const v=(r.days[dateKey]||'').trim();
+    if(subLetters.has(v)) delete r.days[dateKey];
+  });
+
+  // 2. รวบรวม sub rows ที่มีค่าในวันนี้ (ตามลำดับ index)
+  const activeSubs=subRows.filter(r=>(r.days[dateKey]||'').trim()!=='');
+  if(activeSubs.length===0){ setTimeout(()=>buildGrid(),10); return; }
+
+  // 3. หา reg rows ที่ว่าง (ไม่มีตัวเลข) ตามลำดับ
+  const freeSlots=[];
+  regRows.forEach((r,i)=>{
+    const v=(r.days[dateKey]||'').trim();
+    const hasNum=v!==''&&!isNaN(parseFloat(v));
+    if(!hasNum) freeSlots.push(i); // ว่าง หรือมีตัวอักษร (จะถูก overwrite)
+  });
+
+  // 4. ใส่ตัวอักษร sub ลงใน free slots ตามลำดับ
+  activeSubs.forEach((sub,i)=>{
+    if(i<freeSlots.length){
+      regRows[freeSlots[i]].days[dateKey]=sub.letter;
+    }
+  });
+
+  setTimeout(()=>buildGrid(),10);
+}
+
+/* legacy wrapper */
+function autoFillSubToReg(dateKey, subIdx){ rebuildSubFill(dateKey); }
+
+/* ── Zoom control ── */
+function applyZoom(v){
+  const z=Math.max(30,Math.min(150,+v));
+  const zi=document.getElementById('ts-zoom');
+  const zv=document.getElementById('ts-zoom-val');
+  if(zi) zi.value=z;
+  if(zv) zv.textContent=z+'%';
+  // CSS zoom — ย่อตารางจริง scrollbar ปรับอัตโนมัติ
+  const outers=document.querySelectorAll('#ts-out .att-outer');
+  outers.forEach(o=>{
+    o.style.zoom=z/100;
+    o.style.transform='';
+    o.style.width='';
+  });
+  // sync sticky scrollbar width
+  syncHScroll();
+}
+
+function stepZoom(delta){
+  const zi=document.getElementById('ts-zoom');
+  if(zi) applyZoom(+zi.value+delta);
+}
+
+
+
+/* ── Sticky scrollbar + sync ── */
+function syncHScroll(){
+  const outers=Array.from(document.querySelectorAll('#ts-out .att-outer'));
+  const hscroll=document.getElementById('ts-hscroll');
+  const inner=document.getElementById('ts-hscroll-inner');
+  if(!outers.length||!hscroll||!inner) return;
+  // หา scrollWidth ที่ใหญ่สุด (คำนวณ zoom)
+  const zoom=parseFloat(outers[0].style.zoom||1);
+  const maxW=Math.max(...outers.map(o=>o.scrollWidth*(zoom||1)));
+  inner.style.width=maxW+'px';
+  hscroll.style.display='block';
+}
+
+function initScrollSync(){
+  syncHScroll();
+  // show zoom slider มุมขวาล่าง
+  const zf=document.getElementById('ts-zoom-fixed');
+  if(zf) zf.style.display='flex';
+  // sync scroll: sticky scrollbar ↔ att-outer
+  const hscroll=document.getElementById('ts-hscroll');
+  const outers=Array.from(document.querySelectorAll('#ts-out .att-outer'));
+  if(!hscroll||!outers.length) return;
+  let syncing=false;
+  const syncAll=(src,targets)=>{
+    if(syncing) return; syncing=true;
+    targets.forEach(t=>{ if(t!==src) t.scrollLeft=src.scrollLeft; });
+    setTimeout(()=>syncing=false,20);
+  };
+  hscroll.addEventListener('scroll',()=>syncAll(hscroll,outers),{passive:true});
+  outers.forEach(o=>o.addEventListener('scroll',()=>syncAll(o,[hscroll,...outers]),{passive:true}));
+}
+
+function setOtDay(arr,idx,key,val){ setOtDayOrig(arr,idx,key,val); }
+
+/* Arrow-key navigation inside attendance grid */
+document.addEventListener('keydown', function(e){
+  const el=document.activeElement;
+  const isDC=el&&el.classList.contains('dc');
+  const isNM=el&&el.classList.contains('nm-in');
+  if(!isDC&&!isNM) return;
+  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter'].includes(e.key)) return;
+
+  const td=el.closest('td');
+  if(!td) return;
+  const tr=td.closest('tr');
+  if(!tr) return;
+  const tbody=tr.closest('tbody');
+  if(!tbody) return;
+  const allRows=Array.from(tbody.querySelectorAll('tr'));
+  const allTds=Array.from(tr.querySelectorAll('td'));
+  const colIdx=allTds.indexOf(td);
+
+  // nm-in (ชื่อ): ArrowDown/Up/Enter → ไปชื่อแถวถัดไป, ArrowRight → ไปช่อง dc แรก
+  if(isNM){
+    if(e.key==='ArrowRight'){
+      e.preventDefault();
+      const inp=tr.querySelector('input.dc:not(.dc-ot-in)');
+      if(inp){inp.focus();inp.select();}
+      return;
+    }
+    if(e.key==='ArrowDown'||e.key==='Enter'||e.key==='ArrowUp'){
+      e.preventDefault();
+      const dir=e.key==='ArrowUp'?-1:1;
+      let rIdx=allRows.indexOf(tr)+dir;
+      while(rIdx>=0&&rIdx<allRows.length){
+        const nminp=allRows[rIdx].querySelector('input.nm-in');
+        if(nminp){nminp.focus();nminp.select();return;}
+        rIdx+=dir;
+      }
+      return;
+    }
+    return; // ArrowLeft → browser default (cursor ใน text)
+  }
+
+  // dc input: เหมือนเดิม
+  e.preventDefault();
+  const isOtInput=el.classList.contains('dc-ot-in');
+
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){
+    // ArrowLeft จากช่องแรก → ไปช่อง nm-in
+    if(e.key==='ArrowLeft'){
+      const firstDcCol=allTds.findIndex(t=>t.querySelector('input.dc'));
+      if(colIdx<=firstDcCol){
+        const nm=tr.querySelector('input.nm-in');
+        if(nm){nm.focus();nm.select();return;}
+      }
+    }
+    const dir=e.key==='ArrowLeft'?-1:1;
+    let c=colIdx+dir;
+    while(c>=0&&c<allTds.length){
+      const inp=isOtInput
+        ? allTds[c].querySelector('input.dc-ot-in')
+        : allTds[c].querySelector('input.dc:not(.dc-ot-in)');
+      if(inp){inp.focus();inp.select();return;}
+      c+=dir;
+    }
+  } else if(e.key==='ArrowUp'||e.key==='ArrowDown'||e.key==='Enter'){
+    const dir=(e.key==='ArrowUp')?-1:1;
+    let rIdx=allRows.indexOf(tr)+dir;
+    while(rIdx>=0&&rIdx<allRows.length){
+      const nextTd=allRows[rIdx].querySelectorAll('td')[colIdx];
+      if(nextTd){
+        const inp=isOtInput
+          ? nextTd.querySelector('input.dc-ot-in')
+          : nextTd.querySelector('input.dc:not(.dc-ot-in)');
+        if(inp){inp.focus();inp.select();return;}
+      }
+      rIdx+=dir;
+    }
+  }
+});
+
+function recalcRow(arr,idx,el){
+  // Auto-fix: if value starts with "." prepend 0
+  if(el&&el.value&&el.value.startsWith('.')){
+    el.value='0'+el.value;
+    // sync back to data
+    if(el.classList.contains('dc-ot-in')){
+      const key=el.closest('td')?.dataset?.key;
+      if(key) setOtDay(arr,idx,key,el.value);
+    } else {
+      const key=el.closest('td')?.dataset?.key;
+      if(key) setDay(arr,idx,key,el.value);
+    }
+  }
+  const row=arr[idx];
+  const isReg=(arr===regRows);
+  const pfx=isReg?'r':'s';
+
+  /* OT = เฉพาะ OT วันทำงานปกติ (ไม่ใช่วันหยุด) */
+  let otNormal=0;
+  Object.entries(row.otDays||{}).forEach(([k,v])=>{
+    const n=parseFloat(v)||0;
+    if(n<=0) return;
+    const d=new Date(k);
+    if(!isSunday(d)&&!isHoliday(d)) otNormal+=n;
+  });
+  row.ot=otNormal>0?fmtOT(otNormal):'';
+  const elOT=document.getElementById(`ot-${pfx}-${idx}`);
+  if(elOT) elOT.textContent=row.ot||'-';
+
+  /* H = count วันหยุดที่มีการทำงาน (มีค่า > 0) */
+  let hCount=0;
+  Object.entries(row.days).forEach(([k,v])=>{
+    if(!v||v.trim()==='') return;
+    if(/^[A-Za-z]$/.test(v.trim())) return;
+    const n=parseFloat(v);
+    if(isNaN(n)||n<=0) return;          // ต้องมีค่าจริง > 0
+    const d=new Date(k);
+    if(isSunday(d)||isHoliday(d)) hCount++;
+  });
+  row.h=hCount>0?hCount:'';
+  const elH=document.getElementById(`h-${pfx}-${idx}`);
+  if(elH) elH.textContent=row.h||'-';
+
+  /* OT.H = OT on holiday days */
+  let othTotal=0;
+  Object.entries(row.otDays||{}).forEach(([k,v])=>{
+    const n=parseFloat(v)||0;
+    if(n<=0) return;
+    const d=new Date(k);
+    if(isSunday(d)||isHoliday(d)) othTotal+=n;
+  });
+  row.oth=othTotal>0?fmtOT(othTotal):'';
+  const elOTH=document.getElementById(`oth-${pfx}-${idx}`);
+  if(elOTH) elOTH.textContent=row.oth||'-';
+
+  /* Total = sum normal workday minutes → D.HMM */
+  let normalMin=0;
+  Object.entries(row.days).forEach(([k,v])=>{
+    if(!v||v.trim()==='') return;
+    const d=new Date(k);
+    if(!isSunday(d)&&!isHoliday(d)) normalMin+=parseWorkToMin(v);
+  });
+  row.total=minToDisplay(normalMin);
+  row.totalMin=normalMin;
+  const elTot=document.getElementById(`tot-${pfx}-${idx}`);
+  if(elTot) elTot.textContent=row.total||'-';
+  updateGroupTotal(arr===regRows?'reg':'sub');
+}
+
+/* Toggle * star on regular worker */
+function toggleStar(idx){
+  if(idx>=regRows.length) return;
+  regRows[idx].starOn = !regRows[idx].starOn;
+  buildGrid();
+}
+
+/* recalc the total summary row for a group */
+function updateGroupTotal(grp){
+  const rows=grp==='reg'?regRows:subRows;
+  const sumMin=rows.reduce((s,r)=>s+(r.totalMin||0),0);
+  const tTot=minToDisplay(sumMin);
+  const elT=document.getElementById(`tot-total-${grp}`);
+  if(elT) elT.textContent=tTot;
+  const tOT=rows.reduce((s,r)=>s+(parseFloat(r.ot)||0),0);
+  const elOT=document.getElementById(`tot-ot-${grp}`);
+  if(elOT) elOT.textContent=fmtOT(tOT);
+  const tH=rows.reduce((s,r)=>s+(parseFloat(r.h)||0),0);
+  const elH=document.getElementById(`tot-h-${grp}`);
+  if(elH) elH.textContent=tH||'0';
+  const tOTH=rows.reduce((s,r)=>s+(parseFloat(r.oth)||0),0);
+  const elOTH=document.getElementById(`tot-oth-${grp}`);
+  if(elOTH) elOTH.textContent=fmtOT(tOTH);
+}
+
+/* ============================================================
+   COPY NAMES FROM PREVIOUS PERIOD
+   ============================================================ */
+function showCopyNamesDialog(){
+  if(!S.timesheets.length){alert('ยังไม่มีงวดที่บันทึกไว้');return;}
+  const sel=document.getElementById('copy-src');
+  sel.innerHTML=S.timesheets.map(t=>`<option value="${t.id}">${CFG[t.plant]?.name||t.plant} / ${CFG[t.plant]?.depts?.[t.dept]?.name||t.dept} (${t.ds} – ${t.de})</option>`).join('');
+  const modal=document.getElementById('copy-modal');
+  modal.style.display='flex';
+}
+function doCopyNames(){
+  const id=parseInt(document.getElementById('copy-src').value);
+  const ts=S.timesheets.find(t=>t.id===id);
+  if(!ts){alert('ไม่พบข้อมูล');return;}
+  // copy reg names
+  ts.regRows.forEach((r,i)=>{if(i<regRows.length&&r.name) regRows[i].name=r.name;});
+  // copy sub names
+  ts.subRows.forEach((r,i)=>{if(i<subRows.length&&r.name) subRows[i].name=r.name;});
+  document.getElementById('copy-modal').style.display='none';
+  buildGrid();
+  alert('✅ ดึงชื่อพนักงานจากงวด '+ts.ds+' – '+ts.de+' เรียบร้อย');
+}
+
+/* ============================================================
+   SAVE / LOAD TIMESHEET
+   ============================================================ */
+function saveTS(){
+  const plant=document.getElementById('tf-plant').value;
+  const dept=document.getElementById('tf-dept').value;
+  const ds=document.getElementById('tf-ds').value;
+  const de=document.getElementById('tf-de').value;
+  const key=`${plant}__${dept}`;
+
+  const tOT=regRows.reduce((s,r)=>s+(parseFloat(r.ot)||0),0)+subRows.reduce((s,r)=>s+(parseFloat(r.ot)||0),0);
+  const tH=regRows.reduce((s,r)=>s+(parseInt(r.h)||0),0)+subRows.reduce((s,r)=>s+(parseInt(r.h)||0),0);
+  const tOTH=regRows.reduce((s,r)=>s+(parseFloat(r.oth)||0),0)+subRows.reduce((s,r)=>s+(parseFloat(r.oth)||0),0);
+
+  S.timesheets=S.timesheets.filter(t=>t.key!==key);
+  S.timesheets.push({
+    id:Date.now(),key,plant,dept,ds,de,
+    regRows:JSON.parse(JSON.stringify(regRows)),
+    subRows:JSON.parse(JSON.stringify(subRows)),
+    holidays:[...holidays],
+    totalOT:tOT, totalH:tH, totalOTH:tOTH,
+    savedAt:new Date().toLocaleString('th-TH')
+  });
+  renderSavedTS();
+  dbSaveTS(S.timesheets.at(-1));
+  alert(`✅ บันทึกใบบันทึกเวลา ${CFG[plant]?.name||plant} / ${CFG[plant]?.depts?.[dept]?.name||dept} เรียบร้อย`);
+}
+
+function renderSavedTS(){
+  const el=document.getElementById('saved-ts');
+  if(!S.timesheets.length){el.innerHTML='<p style="color:var(--light);font-size:13px;text-align:center;padding:.75rem">ยังไม่มีข้อมูล</p>';return;}
+  el.innerHTML=`<table class="dt"><thead><tr>
+    <th>โรงงาน</th><th>แผนก</th><th>ช่วงวันที่</th>
+    <th class="num">OT รวม</th><th class="num">H รวม</th><th class="num">OT.H รวม</th><th>บันทึกเมื่อ</th><th></th>
+  </tr></thead><tbody>`+
+  S.timesheets.map(t=>`<tr>
+    <td><span class="badge bg-navy">${CFG[t.plant]?.name||t.plant}</span></td>
+    <td><span class="badge bg-gold">${CFG[t.plant]?.depts?.[t.dept]?.name||t.dept}</span></td>
+    <td style="font-size:11.5px">${t.ds} – ${t.de}</td>
+    <td class="num">${t.totalOT||0}</td>
+    <td class="num">${t.totalH||0}</td>
+    <td class="num">${t.totalOTH||0}</td>
+    <td style="font-size:11.5px;color:var(--muted)">${t.savedAt}</td>
+    <td><button class="btn ba bsm" onclick="useTS(${t.id})">ใช้งาน →</button></td>
+  </tr>`).join('')+'</tbody></table>';
+}
+
+function useTS(id){
+  const t=S.timesheets.find(x=>x.id===id);
+  if(!t) return;
+  document.getElementById('tf-plant').value=t.plant;
+  onPlantChange();
+  document.getElementById('tf-dept').value=t.dept;
+  document.getElementById('tf-ds').value=t.ds;
+  document.getElementById('tf-de').value=t.de;
+  regRows=JSON.parse(JSON.stringify(t.regRows));
+  subRows=JSON.parse(JSON.stringify(t.subRows));
+  holidays=[...(t.holidays||[])];
+  renderHolidays();
+  buildGrid();
+}
+
+function goInv(){
+  saveTS();
+  document.querySelectorAll('.tb')[1].click();
+  document.getElementById('inv-plant').value=document.getElementById('tf-plant').value;
+  onInvPlantChange();
+  document.getElementById('inv-dept').value=document.getElementById('tf-dept').value;
+  loadTStoInv();
+}
+
+/* ============================================================
+   INVOICE CALC
+   ============================================================ */
+/* คำนวณสรุปพนักงาน → ใช้ใน invoice */
+function getStaffSummary(plant,dept){
+  const key=`${plant}__${dept}`;
+  const ts=S.timesheets.find(t=>t.key===key);
+  if(!ts) return null;
+  const dates=getDates(ts.ds,ts.de);
+  const normalDays=dates.filter(d=>!isSunday(d)&&!isHoliday(d)).length;
+  const result={full:[],partial:[],sub:[],normalDays};
+  ts.regRows.forEach((r,i)=>{
+    if(!r.name) return;
+    let worked=0;
+    dates.forEach(d=>{
+      if(isSunday(d)||isHoliday(d)) return;
+      const v=(r.days[d.toISOString().slice(0,10)]||'').trim();
+      if(v!=='') worked++;
+    });
+    const absent=normalDays-worked;
+    if(absent<=3) result.full.push({...r,idx:i,absent,worked});
+    else result.partial.push({...r,idx:i,absent,worked});
+  });
+  ts.subRows.forEach((r,i)=>{
+    if(!r.name) return;
+    let worked=0;
+    dates.forEach(d=>{
+      if(isSunday(d)||isHoliday(d)) return;
+      const v=(r.days[d.toISOString().slice(0,10)]||'').trim();
+      if(v!=='') worked++;
+    });
+    if(worked>0) result.sub.push({...r,idx:i,worked});
+  });
+  return result;
+}
+
+function loadTStoInv(){
+  const plant=document.getElementById('inv-plant').value;
+  const dept=document.getElementById('inv-dept').value;
+  const cfg=CFG[plant]?.depts?.[dept]||{};
+  document.getElementById('i-cnt').value=cfg.workers||1;
+  document.getElementById('i-rate').value=cfg.rate||11900;
+  document.getElementById('i-otr').value=cfg.ot_rate||74.38;
+  document.getElementById('i-hr').value=cfg.hol_rate||793.34;
+
+  const key=`${plant}__${dept}`;
+  const ts=S.timesheets.find(t=>t.key===key);
+  if(ts){
+    document.getElementById('i-oth').value=ts.totalOT||0;
+    document.getElementById('i-hot').value=ts.totalOTH||0;
+    document.getElementById('i-otp').value=ts.regRows.length;
+    // คำนวณวันหยุดทำงาน: นับ unique holiday dates ที่มีการกรอกค่า
+    {
+      const tsDates=getDates(ts.ds,ts.de);
+      const holidayDatesWorked=new Set();
+      let totalHolWorkers=0;
+      [...ts.regRows,...ts.subRows].forEach(r=>{
+        tsDates.forEach(d=>{
+          if(!isSunday(d)&&!isHoliday(d)) return;
+          const k=d.toISOString().slice(0,10);
+          const v=(r.days?.[k]||'').trim();
+          if(v!==''){
+            holidayDatesWorked.add(k);
+            totalHolWorkers++;
+          }
+        });
+      });
+      const uniqueHolDays=holidayDatesWorked.size;
+      const avgHolWorkers=uniqueHolDays>0?Math.round(totalHolWorkers/uniqueHolDays):0;
+      document.getElementById('i-hp').value=avgHolWorkers||0;  // เฉลี่ยคนต่อวัน (แสดงข้อมูล)
+      document.getElementById('i-hd').value=ts.totalH||0;  // H รวม = จำนวนวันหยุดที่ทำงานทั้งหมด
+    }
+    // คำนวณจากใบบันทึกเวลา: คนเต็ม + คนแทน
+    const summary=getStaffSummary(plant,dept);
+    window._lastSummary=summary;
+    if(summary){
+      const fullCnt=summary.full.length;
+      const partCnt=summary.partial.length;
+      const subCnt=summary.sub.length;
+      document.getElementById('i-cnt').value=fullCnt;
+      // คิดรายวัน: dr × worked days แต่ละคน
+      const rateNow=parseFloat(document.getElementById('i-rate').value)||11900;
+      const dr2=rateNow/30;
+      const totalPartAmt=summary.partial.reduce((s,r)=>s+dr2*r.worked,0);
+      let pf=document.getElementById('i-partamt');
+      if(!pf){pf=document.createElement('input');pf.type='hidden';pf.id='i-partamt';document.body.appendChild(pf);}
+      pf.value=partCnt>0?totalPartAmt.toFixed(4):'0';
+      document.getElementById('i-abs').value=partCnt>0?summary.partial.reduce((s,r)=>s+r.worked,0):0;
+      calcInv();
+      // แสดงสรุปใต้ dropdown
+      let el=document.getElementById('inv-staff-summary');
+      if(!el){
+        el=document.createElement('div');
+        el.id='inv-staff-summary';
+        el.style.cssText='font-size:12.5px;padding:8px 12px;background:#e0eaf7;border-radius:8px;margin-top:8px;color:var(--navy);line-height:1.7';
+        document.getElementById('i-cnt').closest('.g4').insertAdjacentElement('afterend',el);
+      }
+      const cfg2=CFG[plant]?.depts?.[dept]||{};
+      const dr=(cfg2.rate||11900)/30;
+      let txt=`<strong>สรุปจากใบบันทึกเวลา:</strong><br>`;
+      txt+=`⭐ พนักงานคิดเต็ม (★): <strong>${fullCnt} คน</strong><br>`;
+      if(partCnt>0){
+        txt+=`📅 พนักงานคิดรายวัน (ขาด>3วัน): <strong>${partCnt} คน</strong><br>`;
+        summary.partial.forEach(r=>{
+          txt+=`&nbsp;&nbsp;• ${r.name}: ทำ <strong>${r.worked}</strong>/${summary.normalDays} วัน (ขาด ${r.absent} วัน, หัก ≈ ${(dr*r.absent).toFixed(2)} ฿)<br>`;
+        });
+      }
+      if(subCnt>0){
+        txt+=`🔄 พนักงานแทน/สำรอง: <strong>${subCnt} คน</strong><br>`;
+        summary.sub.forEach(r=>{txt+=`&nbsp;&nbsp;• ${r.name}: ทำ <strong>${r.worked}</strong> วัน<br>`;});
+      }
+      el.innerHTML=txt;
+    }
+  }
+  calcInv();
+}
+
+function calcInv(){
+  const r=parseFloat(document.getElementById('i-rate').value)||0;
+  document.getElementById('i-drate').value=(r/30).toFixed(2);
+  const d=getCalc();
+  document.getElementById('i-otamt').value=d.ot_amt.toFixed(2);
+  document.getElementById('i-holamt').value=(d.hol_amt+d.hol_ot).toFixed(2);
+  return d;
+}
+
+function getCalc(){
+  const cnt=parseInt(document.getElementById('i-cnt').value)||0;
+  const rate=parseFloat(document.getElementById('i-rate').value)||0;
+  const abs=parseInt(document.getElementById('i-abs').value)||0;
+  const dr=parseFloat((rate/30).toFixed(4));
+  const partAmt=parseFloat(document.getElementById('i-partamt')?.value||0)||0;
+  const oth=parseFloat(document.getElementById('i-oth').value)||0;
+  const otp=parseInt(document.getElementById('i-otp').value)||1;
+  const otr=parseFloat(document.getElementById('i-otr').value)||0;
+  const hp=parseInt(document.getElementById('i-hp').value)||0;
+  const hd=parseInt(document.getElementById('i-hd').value)||0;
+  const hr=parseFloat(document.getElementById('i-hr').value)||0;
+  const hot=parseFloat(document.getElementById('i-hot').value)||0;
+
+  const contract  =rate*cnt;
+  const part_amt  =partAmt;
+  const ot_amt    =otr*oth;  // OT รวม (ชม.) × rate — ไม่คูณคน เพราะ OT คือยอดรวมแล้ว
+  const hol_amt   =hr*hd;    // Holiday วันรวม × rate/วัน — ไม่คูณคน
+  const hol_ot    =(hr/8)*hot;
+  const up=contract+part_amt+ot_amt+hol_amt+hol_ot;
+  const vat=up*0.07;
+  const grand=up+vat;
+  return {cnt,rate,abs,dr,contract,part_amt,oth,otp,otr,ot_amt,hp,hd,hr,hol_amt,hot,hol_ot,up,vat,grand};
+}
+
+function showInvPreview(){
+  const d=calcInv();
+  const plant=document.getElementById('inv-plant').value;
+  const dept=document.getElementById('inv-dept').value;
+  const no=document.getElementById('inv-no').value||'—';
+  const dt=document.getElementById('inv-dt').value;
+  const svc=document.getElementById('inv-svc').value;
+  const plantName=(CFG[plant]||{}).name||plant;
+  const deptName=(CFG[plant]?.depts?.[dept]?.name)||dept;
+
+  document.getElementById('inv-html').innerHTML=`<div class="inv-page">
+  ${getLetterheadHTML(false)}
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.5rem">
+    <div>
+      <div style="font-size:18px;font-weight:700;letter-spacing:.08em;color:var(--navy)">INVOICE</div>
+      <div style="font-size:12px;color:var(--muted)">( TAX No. ${CO.tax} )</div>
+    </div>
+    <div style="text-align:right;font-size:13px">
+      <div><strong>INVOICE No.:</strong> ${no}</div>
+      <div><strong>Date:</strong> ${dt}</div>
+    </div>
+  </div>
+  <div style="font-size:13px;margin-bottom:.25rem"><strong>MESSRS:</strong> HOYA OPTICS (THAILAND) LTD. &nbsp;|&nbsp; <strong>แผนก:</strong> ${plantName} — ${deptName}</div>
+  <div style="font-weight:700;font-size:13.5px;color:var(--navy);margin:.5rem 0;letter-spacing:.05em">${svc}</div>
+  <table class="inv-tbl">
+    <thead><tr><th style="text-align:left">รายการ</th><th style="text-align:right">จำนวน</th><th style="text-align:right">อัตรา (฿)</th><th style="text-align:right">จำนวนเงิน (฿)</th></tr></thead>
+    <tbody>
+      <tr><td>Monthly Cleaning Charge On Contract (${d.cnt} persons)</td><td class="num">${d.cnt}</td><td class="num">${fmt(d.rate)}</td><td class="num">${fmt(d.contract)}</td></tr>
+      ${d.part_amt>0?(window._lastSummary&&window._lastSummary.partial.length?window._lastSummary.partial.map(r=>{const dr2=(parseFloat(document.getElementById('i-rate').value)||11900)/30;return `<tr><td>Daily Rate — ${r.name} (${r.worked} วัน × ${fmt(dr2)}/วัน)</td><td class="num">${r.worked}</td><td class="num">${fmt(dr2)}/วัน</td><td class="num">${fmt(dr2*r.worked)}</td></tr>`;}).join(''):(`<tr><td>Daily Rate (${d.abs} วัน × ${fmt(d.dr)}/วัน)</td><td class="num">${d.abs}</td><td class="num">${fmt(d.dr)}/วัน</td><td class="num">${fmt(d.part_amt)}</td></tr>`)):''}
+      ${d.ot_amt>0?`<tr><td>Over Time Fee (${d.oth} hrs)</td><td class="num">${d.oth} ชม.</td><td class="num">${fmt(d.otr)}/ชม.</td><td class="num">${fmt(d.ot_amt)}</td></tr>`:''}
+      ${d.hol_amt>0?`<tr><td>Holiday Work (ทำงานวันหยุด × 2) — ${d.hd} วัน</td><td class="num">${d.hd} วัน</td><td class="num">${fmt(d.hr)}/วัน</td><td class="num">${fmt(d.hol_amt)}</td></tr>`:''}
+      ${d.hol_ot>0?`<tr><td>Over Time Holiday — ${d.hot} ชม.</td><td class="num">${d.hot} ชม.</td><td class="num">${fmt(d.hr/8)}/ชม.</td><td class="num">${fmt(d.hol_ot)}</td></tr>`:''}
+    </tbody>
+  </table>
+  <div class="totals">
+    <div class="t-row"><span class="t-lbl">UP TOTAL</span><span class="t-val">${fmt(d.up)} Baht</span></div>
+    <div class="t-row"><span class="t-lbl">VAT 7%</span><span class="t-val">${fmt(d.vat)} Baht</span></div>
+    <div class="t-row grand"><span class="t-lbl">GRAND TOTAL</span><span class="t-val">${fmt(d.grand)} Baht</span></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:2rem;font-size:12px;padding-top:.75rem;border-top:1px solid var(--bord)">
+    <div style="text-align:center">
+      <div style="border-top:1px solid #333;width:180px;padding-top:4px;margin-top:24px">HOYA OPTICS (THAILAND) LTD.</div>
+    </div>
+    <div style="text-align:center">
+      <div style="border-top:1px solid #333;width:200px;padding-top:4px;margin-top:24px">${CO.nameEn}<br>${CO.contact}</div>
+    </div>
+  </div>
+  </div>`;
+  document.getElementById('inv-preview').style.display='block';
+  document.getElementById('inv-preview').scrollIntoView({behavior:'smooth'});
+}
+
+function saveInv(){
+  const d=calcInv();
+  const plant=document.getElementById('inv-plant').value;
+  const dept=document.getElementById('inv-dept').value;
+  const no=document.getElementById('inv-no').value;
+  if(!no){alert('กรุณากรอกเลขที่ Invoice');return;}
+  const key=`${plant}__${dept}`;
+  S.invoices=S.invoices.filter(i=>i.key!==key);
+  S.invoices.push({id:Date.now(),key,plant,dept,no,dt:document.getElementById('inv-dt').value,...d});
+  renderInvList();
+  buildSum();
+  dbSaveInv(S.invoices.at(-1));
+  alert(`✅ บันทึก Invoice "${no}" เรียบร้อย`);
+}
+
+function renderInvList(){
+  const el=document.getElementById('inv-list');
+  if(!S.invoices.length){el.innerHTML='<p style="color:var(--light);font-size:13px">ยังไม่มี Invoice</p>';return;}
+  el.innerHTML=`<table class="dt"><thead><tr>
+    <th>Invoice No.</th><th>โรงงาน</th><th>แผนก</th><th>วันที่</th>
+    <th class="num">Up Total</th><th class="num">VAT 7%</th><th class="num">Grand Total</th><th></th>
+  </tr></thead><tbody>`+
+  S.invoices.map(i=>`<tr>
+    <td style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">${i.no}</td>
+    <td><span class="badge bg-navy">${(CFG[i.plant]||{}).name||i.plant}</span></td>
+    <td><span class="badge bg-gold">${CFG[i.plant]?.depts?.[i.dept]?.name||i.dept}</span></td>
+    <td style="font-size:11.5px">${i.dt}</td>
+    <td class="num">${fmt(i.up)}</td><td class="num">${fmt(i.vat)}</td>
+    <td class="num" style="font-weight:700;color:var(--navy)">${fmt(i.grand)}</td>
+    <td><button class="btn bd bsm" onclick="delInv(${i.id})">ลบ</button></td>
+  </tr>`).join('')+'</tbody></table>';
+}
+
+function delInv(id){
+  if(!confirm('ต้องการลบ Invoice นี้?')) return;
+  S.invoices=S.invoices.filter(i=>i.id!==id);
+  renderInvList();buildSum();
+  dbDeleteInv(id);
+}
+
+/* ============================================================
+   SUMMARY
+   ============================================================ */
+function numToEng(n){
+  // แปลงจำนวนเงิน → ตัวอักษรภาษาอังกฤษ
+  const ones=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE',
+    'TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+  const tens=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+  function h(n){
+    if(n===0) return '';
+    if(n<20) return ones[n]+' ';
+    if(n<100) return tens[Math.floor(n/10)]+' '+(n%10?ones[n%10]+' ':'');
+    return ones[Math.floor(n/100)]+' HUNDRED '+(n%100?h(n%100):'');
+  }
+  const baht=Math.floor(Math.abs(n));
+  const satang=Math.round((Math.abs(n)-baht)*100);
+  let s='';
+  if(baht>=1000000) s+=h(Math.floor(baht/1000000))+'MILLION ';
+  if(baht>=1000) s+=h(Math.floor((baht%1000000)/1000))+'THOUSAND ';
+  s+=h(baht%1000);
+  s=s.trim()+' BAHT';
+  if(satang>0) s+=' AND '+h(satang).trim()+' SATANG';
+  s+=' ONLY';
+  return s;
+}
+
+function buildSum(){
+  const plant=document.getElementById('sum-plant').value;
+  const mon=document.getElementById('sum-mon').value;
+  const el=document.getElementById('sum-card');
+  const rel=plant==='ALL'?S.invoices:S.invoices.filter(i=>i.plant===plant);
+  if(!rel.length){el.innerHTML='<div class="alert ai">⚠️ ยังไม่มี Invoice — บันทึก Invoice ในแท็บ Invoice ก่อน</div>';return;}
+
+  const tUp=rel.reduce((s,i)=>s+i.up,0);
+  const tVat=rel.reduce((s,i)=>s+i.vat,0);
+  const tG=rel.reduce((s,i)=>s+i.grand,0);
+
+  /* Group by plant */
+  const byPlant={};
+  rel.forEach(i=>{
+    if(!byPlant[i.plant]) byPlant[i.plant]=[];
+    byPlant[i.plant].push(i);
+  });
+
+  let tableRows='';
+  let rowNum=1;
+  Object.entries(byPlant).forEach(([p,invs])=>{
+    const pName=(CFG[p]||{}).name||p;
+    const pUp=invs.reduce((s,i)=>s+i.up,0);
+    const pVat=invs.reduce((s,i)=>s+i.vat,0);
+    const pG=invs.reduce((s,i)=>s+i.grand,0);
+    invs.forEach(inv=>{
+      const dName=CFG[p]?.depts?.[inv.dept]?.name||inv.dept;
+      tableRows+=`<tr>
+        <td style="font-weight:700;color:var(--muted)">${rowNum++}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">${inv.no}</td>
+        <td>${pName}</td>
+        <td><span class="badge bg-gold">${dName}</span></td>
+        <td class="num">${fmt(inv.up)}</td><td class="num">${fmt(inv.vat)}</td>
+        <td class="num" style="font-weight:700">${fmt(inv.grand)}</td>
+      </tr>`;
+    });
+    if(Object.keys(byPlant).length>1)
+      tableRows+=`<tr class="tr-sub"><td colspan="4" style="text-align:right">รวม ${pName}</td>
+        <td class="num">${fmt(pUp)}</td><td class="num">${fmt(pVat)}</td><td class="num">${fmt(pG)}</td></tr>`;
+  });
+
+  el.innerHTML=`
+  <div class="sum-letterhead">${getLetterheadHTML(false)}</div>
+  <div style="text-align:center;margin-bottom:10px">
+    <div style="font-size:16px;font-weight:700;color:var(--navy)">DEBIT NOTE SUMMARY</div>
+    <div style="font-size:13px;color:var(--muted)">ON ${mon}</div>
+  </div>
+  <div class="sgrid">
+    <div class="sc"><div class="sl">Invoice</div><div class="sv">${rel.length}</div></div>
+    <div class="sc"><div class="sl">Up Total</div><div class="sv">${fmt(tUp)}</div></div>
+    <div class="sc"><div class="sl">VAT 7%</div><div class="sv gold">${fmt(tVat)}</div></div>
+    <div class="sc"><div class="sl">Grand Total</div><div class="sv grn">${fmt(tG)}</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--navy);padding:6px 12px;background:#f0f7ff;border-radius:8px;margin-bottom:8px;font-style:italic">
+    ( ${numToEng(tG)} )
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:.5rem;display:flex;justify-content:space-between">
+    <strong>DEBIT NOTE SUMMARY ON ${mon}</strong>
+    <span>DATE: ${new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}</span>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="dt"><thead><tr>
+    <th style="width:32px">NO.</th><th>INVOICE NO.</th><th>โรงงาน</th><th>แผนก</th>
+    <th class="num">UP TOTAL (฿)</th><th class="num">VAT 7% (฿)</th><th class="num">GRAND TOTAL (฿)</th>
+  </tr></thead><tbody>${tableRows}</tbody>
+  <tfoot><tr class="tr-tot">
+    <td colspan="4" style="text-align:right;font-weight:700">TOTAL (${rel.length} invoices)</td>
+    <td class="num">${fmt(tUp)}</td><td class="num">${fmt(tVat)}</td><td class="num">${fmt(tG)}</td>
+  </tr>
+  <tr><td colspan="7" style="text-align:center;font-size:12.5px;color:var(--navy);font-style:italic;padding:8px 12px;background:#f0f7ff">
+    ( ${numToEng(tG)} )
+  </td></tr></tfoot></table>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:2rem;font-size:12px;padding-top:.75rem;border-top:1px solid var(--bord)">
+    <div style="text-align:center"><div style="border-top:1px solid #333;width:180px;padding-top:4px;margin-top:24px">HOYA OPTICS (THAILAND) LTD.</div></div>
+    <div style="text-align:center"><div style="border-top:1px solid #333;width:200px;padding-top:4px;margin-top:24px">${CO.nameEn}<br>${CO.contact}</div></div>
+  </div>`;
+}
+
+function showSumPreview(){
+  const sumCard=document.getElementById('sum-card');
+  if(!sumCard||!sumCard.innerHTML.trim()||sumCard.innerHTML.includes('ยังไม่มี Invoice')){
+    alert('กรุณาสร้าง Invoice ก่อนแล้วดู Summary');return;
+  }
+  const plant=document.getElementById('sum-plant').value;
+  const mon=document.getElementById('sum-mon').value;
+  const clone=sumCard.cloneNode(true);
+  clone.querySelectorAll('button').forEach(b=>b.remove());
+
+  const css=`
+    *{box-sizing:border-box;margin:0;padding:0}
+    @page{size:A4 portrait;margin:15mm 12mm}
+    body{font-family:'Sarabun',sans-serif;font-size:10pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table{border-collapse:collapse;width:100%;font-size:9pt}
+    th{background:#bfbfbf!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;
+       padding:6px 4px;text-align:center;border:1px solid #888;font-weight:700}
+    td{border:1px solid #ccc;padding:5px 4px;font-size:9pt}
+    td.num{text-align:right;font-family:monospace}
+    .tr-tot td{background:#bfbfbf!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-weight:800}
+    .tr-sub td{background:#e8e8e8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-weight:700}
+    .sgrid{display:flex;gap:12px;margin-bottom:12px}
+    .sc{flex:1;border:1px solid #ccc;border-radius:6px;padding:8px;text-align:center}
+    .sl{font-size:8pt;color:#666}
+    .sv{font-size:13pt;font-weight:700}
+    .sv.grn{color:#1a6b3c}.sv.gold{color:#8a5c00}
+    .badge{display:inline-block;padding:2px 6px;border-radius:4px;font-size:8pt}
+    .bg-navy{background:#1a3a5c;color:#fff}
+    .bg-gold{background:#c8a030;color:#1a2035}
+    .sum-letterhead img{max-height:50pt}
+  `;
+
+  const html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Summary '+mon+'</title>'
+    +'<style>'+css+'</style>'
+    +'</head><body>'
+    +clone.innerHTML
+    +'
+<script>
+
+
+// ═══════════════════════════════════════════════════════════════
+// G = Grid Engine
+// ═══════════════════════════════════════════════════════════════
+var D2G=(function(){
+  var ROWS=40,COLS=12,PW=794,PH=1123;
+  var cells=[],rh=[],cw=[];
+  var r0=0,c0=0,r1=0,c1=0; // selection (r0c0 = anchor, r1c1 = end)
+  var editing=false;
+  var hist=[],hi=-1;
+  var bcol='#333333',bw=1,bs='solid';
+  var dragging=null; // {type:'col'|'row', idx, x0|y0, w0|h0}
+  var dragSel=false;
+
+  // ─── Cell factory ───
+  function mkc(t){return{text:t||'',bold:false,italic:false,underline:false,
+    align:'left',valign:'top',color:'#000000',bgColor:'#ffffff',
+    fontSize:10,fontFamily:'Sarabun',padding:2,wrap:true,
+    bt:null,bb:null,bl:null,br:null,mergedHidden:false,merged:null};}
+
+  // ─── Init ───
+  function init(rows,cols){
+    ROWS=rows||40;COLS=cols||12;
+    cells=[];rh=[];cw=[];
+    for(var r=0;r<ROWS;r++){rh.push(22);cells.push([]);for(var c=0;c<COLS;c++)cells[r].push(mkc());}
+    for(var c=0;c<COLS;c++)cw.push(80);
+    r0=0;c0=0;r1=0;c1=0;
+  }
+
+  // ─── Column name ───
+  function cn(c){var s='';c++;while(c>0){s=String.fromCharCode(64+(c%26||26))+s;c=Math.floor((c-1)/26);}return s;}
+
+  // ─── Render ───
+  function render(){
+    renderHdrs();
+    renderBody();
+    hlSel();
+    updateUI();
+  }
+
+  function renderHdrs(){
+    var el=document.getElementById('colhdrs');
+    el.innerHTML='';
+    for(var c=0;c<COLS;c++){
+      var d=document.createElement('div');
+      d.className='chdr';
+      d.style.width=cw[c]+'px';
+      d.style.minWidth=cw[c]+'px';
+      d.textContent=cn(c);
+      d.dataset.c=c;
+      // resize handle
+      var rz=document.createElement('div');
+      rz.className='chdr-rz';
+      rz.dataset.c=c;
+      rz.addEventListener('mousedown',startColDrag);
+      d.appendChild(rz);
+      el.appendChild(d);
+    }
+  }
+
+  function renderBody(){
+    var el=document.getElementById('gbody');
+    el.innerHTML='';
+    for(var r=0;r<ROWS;r++){
+      var row=document.createElement('div');
+      row.className='grow';
+      // row number
+      var rn=document.createElement('div');
+      rn.className='rnum';
+      rn.style.height=rh[r]+'px';
+      rn.style.lineHeight=rh[r]+'px';
+      rn.textContent=r+1;
+      rn.dataset.r=r;
+      var rzv=document.createElement('div');
+      rzv.className='rnum-rz';
+      rzv.dataset.r=r;
+      rzv.addEventListener('mousedown',startRowDrag);
+      rn.appendChild(rzv);
+      row.appendChild(rn);
+      for(var c=0;c<COLS;c++) row.appendChild(buildCell(r,c));
+      el.appendChild(row);
+    }
+    // events
+    el.addEventListener('mousedown',onBodyDown);
+    el.addEventListener('mousemove',onBodyMove);
+  }
+
+  function buildCell(r,c){
+    var cell=cells[r][c];
+    var div=document.createElement('div');
+    div.className='cell';
+    div.id='g-'+r+'-'+c;
+    div.dataset.r=r;div.dataset.c=c;
+    if(cell.mergedHidden){div.classList.add('mhide');return div;}
+    // size
+    var w=cw[c],h=rh[r];
+    if(cell.merged){
+      for(var dc=1;dc<cell.merged.cs;dc++)w+=cw[c+dc]||0;
+      for(var dr=1;dr<cell.merged.rs;dr++)h+=rh[r+dr]||0;
+    }
+    div.style.width=w+'px';div.style.minWidth=w+'px';
+    div.style.height=h+'px';div.style.minHeight=h+'px';
+    div.style.background=cell.bgColor||'#fff';
+    // borders
+    div.style.borderTop=cell.bt?cell.bt.w+'px '+cell.bt.s+' '+cell.bt.c:'1px solid #d0d4dc';
+    div.style.borderBottom=cell.bb?cell.bb.w+'px '+cell.bb.s+' '+cell.bb.c:'1px solid #d0d4dc';
+    div.style.borderLeft=cell.bl?cell.bl.w+'px '+cell.bl.s+' '+cell.bl.c:'1px solid #d0d4dc';
+    div.style.borderRight=cell.br?cell.br.w+'px '+cell.br.s+' '+cell.br.c:'1px solid #d0d4dc';
+    // inner text
+    var txt=document.createElement('div');
+    txt.className='cell-txt';
+    txt.style.fontSize=(cell.fontSize||10)+'pt';
+    txt.style.fontFamily=(cell.fontFamily||'Sarabun')+',sans-serif';
+    txt.style.fontWeight=cell.bold?'700':'400';
+    txt.style.fontStyle=cell.italic?'italic':'normal';
+    txt.style.textDecoration=cell.underline?'underline':'none';
+    txt.style.color=cell.color||'#000';
+    txt.style.textAlign=cell.align||'left';
+    txt.style.verticalAlign=cell.valign||'top';
+    txt.style.display=cell.valign==='middle'?'flex':cell.valign==='bottom'?'flex':'block';
+    if(cell.valign==='middle')txt.style.alignItems='center';
+    if(cell.valign==='bottom')txt.style.alignItems='flex-end';
+    if(!cell.wrap)txt.style.whiteSpace='nowrap';
+    txt.style.padding=(cell.padding||2)+'px '+(+(cell.padding||2)+4)+'px';
+    txt.innerHTML=(cell.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+    div.appendChild(txt);
+    div.addEventListener('dblclick',onDblClick);
+    return div;
+  }
+
+  function hlSel(){
+    // remove old
+    document.querySelectorAll('.cell.csel,.cell.cinsel').forEach(function(el){el.classList.remove('csel','cinsel');});
+    document.querySelectorAll('.chdr.hl,.chdr.sel,.rnum.hl,.rnum.sel').forEach(function(el){el.classList.remove('hl','sel');});
+    var minR=Math.min(r0,r1),maxR=Math.max(r0,r1);
+    var minC=Math.min(c0,c1),maxC=Math.max(c0,c1);
+    for(var r=minR;r<=maxR;r++){
+      for(var c=minC;c<=maxC;c++){
+        var el=document.getElementById('g-'+r+'-'+c);
+        if(!el) continue;
+        if(r===r0&&c===c0) el.classList.add('csel');
+        else el.classList.add('cinsel');
+      }
+    }
+    // header highlight
+    document.querySelectorAll('.chdr').forEach(function(el){
+      var c=+el.dataset.c;
+      if(c>=minC&&c<=maxC) el.classList.add(minR===0&&maxR===ROWS-1?'sel':'hl');
+    });
+    document.querySelectorAll('.rnum').forEach(function(el){
+      var r=+el.dataset.r;
+      if(r>=minR&&r<=maxR) el.classList.add(minC===0&&maxC===COLS-1?'sel':'hl');
+    });
+  }
+
+  function updateUI(){
+    var rng=r0===r1&&c0===c1?cn(c0)+(r0+1):cn(Math.min(c0,c1))+(Math.min(r0,r1)+1)+':'+cn(Math.max(c0,c1))+(Math.max(r0,r1)+1);
+    var fc=document.getElementById('fcell');var fv=document.getElementById('fval');
+    var sb=document.getElementById('sb-pos');
+    if(fc)fc.value=rng;if(sb)sb.textContent=rng;
+    var cell=cells[r0]&&cells[r0][c0];
+    if(cell){
+      if(fv)fv.value=cell.text||'';
+      // format bar
+      var v=function(id,val){var e=document.getElementById(id);if(e)e.value=val;};
+      v('f-size',cell.fontSize||10);v('f-color',cell.color||'#000000');v('f-bg',cell.bgColor||'#ffffff');
+      var b=function(id,on){var e=document.getElementById(id);if(e)e.className='btn'+(on?' act':'');};
+      b('f-b',cell.bold);b('f-i',cell.italic);b('f-u',cell.underline);
+      // side
+      v('sp-rh',rh[r0]);v('sp-cw',cw[c0]);
+      var mi=document.getElementById('mg-info');
+      if(mi)mi.textContent=cell.merged?'ผสาน '+cell.merged.rs+'×'+cell.merged.cs+' cell':'ไม่ได้ผสาน';
+    }
+  }
+
+  // ─── Mouse events ───
+  function onBodyDown(e){
+    var cellEl=e.target.closest('.cell');
+    if(!cellEl||cellEl.classList.contains('mhide')) return;
+    var r=+cellEl.dataset.r,c=+cellEl.dataset.c;
+    if(e.shiftKey){r1=r;c1=c;}
+    else{r0=r;c0=c;r1=r;c1=c;}
+    dragSel=true;
+    hlSel();updateUI();
+    e.preventDefault();
+  }
+  function onBodyMove(e){
+    if(!dragSel) return;
+    var cellEl=e.target.closest('.cell');
+    if(!cellEl||cellEl.classList.contains('mhide')) return;
+    r1=+cellEl.dataset.r;c1=+cellEl.dataset.c;
+    hlSel();updateUI();
+  }
+  document.addEventListener('mouseup',function(){dragSel=false;});
+
+  function onDblClick(e){
+    var div=e.currentTarget;
+    var r=+div.dataset.r,c=+div.dataset.c;
+    startEdit(r,c);
+    e.stopPropagation();
+  }
+
+  function startEdit(r,c){
+    if(editing) return;
+    editing=true;
+    var div=document.getElementById('g-'+r+'-'+c);
+    if(!div) return;
+    var txt=div.querySelector('.cell-txt');
+    if(!txt) return;
+    var cell=cells[r][c];
+    // set text as plain for editing
+    txt.textContent=cell.text||'';
+    txt.contentEditable='true';
+    txt.focus();
+    // select all
+    try{var range=document.createRange();range.selectNodeContents(txt);window.getSelection().removeAllRanges();window.getSelection().addRange(range);}catch(e){}
+    txt.oninput=function(){cell.text=txt.innerText.replace(/<br>/g,'\n');updateUI();};
+    txt.onblur=function(){
+      txt.contentEditable='false';editing=false;
+      cell.text=txt.innerText.replace(/<br>/g,'\n');
+      pushHist();renderPreview();
+    };
+    txt.onkeydown=function(e2){
+      if(e2.key==='Escape'){txt.innerHTML=(cell.text||'').replace(/\n/g,'<br>');txt.blur();}
+      if(e2.key==='Enter'&&!e2.shiftKey){e2.preventDefault();txt.blur();moveSel(1,0);}
+      if(e2.key==='Tab'){e2.preventDefault();txt.blur();moveSel(0,e2.shiftKey?-1:1);}
+    };
+  }
+
+  function moveSel(dr,dc){
+    r0=Math.max(0,Math.min(ROWS-1,r0+dr));
+    c0=Math.max(0,Math.min(COLS-1,c0+dc));
+    r1=r0;c1=c0;
+    hlSel();updateUI();
+    var el=document.getElementById('g-'+r0+'-'+c0);
+    if(el)el.scrollIntoView({block:'nearest',inline:'nearest'});
+  }
+
+  // ─── Column/Row resize ───
+  function startColDrag(e){
+    e.stopPropagation();e.preventDefault();
+    var c=+this.dataset.c;
+    dragging={type:'col',idx:c,x0:e.clientX,w0:cw[c]};
+    document.addEventListener('mousemove',doDrag);
+    document.addEventListener('mouseup',endDrag);
+  }
+  function startRowDrag(e){
+    e.stopPropagation();e.preventDefault();
+    var r=+this.dataset.r;
+    dragging={type:'row',idx:r,y0:e.clientY,h0:rh[r]};
+    document.addEventListener('mousemove',doDrag);
+    document.addEventListener('mouseup',endDrag);
+  }
+  function doDrag(e){
+    if(!dragging) return;
+    if(dragging.type==='col'){
+      cw[dragging.idx]=Math.max(20,dragging.w0+(e.clientX-dragging.x0));
+      // update only this column width in DOM
+      var hdrs=document.querySelectorAll('#colhdrs .chdr');
+      if(hdrs[dragging.idx]){hdrs[dragging.idx].style.width=cw[dragging.idx]+'px';hdrs[dragging.idx].style.minWidth=cw[dragging.idx]+'px';}
+      // update cells in this column
+      for(var r=0;r<ROWS;r++){
+        var el=document.getElementById('g-'+r+'-'+dragging.idx);
+        if(el&&!el.classList.contains('mhide')){
+          var cell=cells[r][dragging.idx];
+          if(!cell.merged){el.style.width=cw[dragging.idx]+'px';el.style.minWidth=cw[dragging.idx]+'px';}
+        }
+      }
+    } else {
+      rh[dragging.idx]=Math.max(12,dragging.h0+(e.clientY-dragging.y0));
+      // update row
+      var rows=document.querySelectorAll('#gbody .grow');
+      if(rows[dragging.idx]){
+        rows[dragging.idx].querySelectorAll('.cell,.rnum').forEach(function(el){
+          el.style.height=rh[dragging.idx]+'px';
+          el.style.minHeight=rh[dragging.idx]+'px';
+        });
+        var rn=rows[dragging.idx].querySelector('.rnum');
+        if(rn)rn.style.lineHeight=rh[dragging.idx]+'px';
+      }
+    }
+  }
+  function endDrag(){
+    if(dragging){pushHist();renderPreview();}
+    dragging=null;
+    document.removeEventListener('mousemove',doDrag);
+    document.removeEventListener('mouseup',endDrag);
+  }
+
+  // ─── Format ───
+  function eachSel(fn){
+    var minR=Math.min(r0,r1),maxR=Math.max(r0,r1);
+    var minC=Math.min(c0,c1),maxC=Math.max(c0,c1);
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++) if(cells[r]&&cells[r][c]) fn(cells[r][c],r,c);
+    pushHist();
+    // partial re-render only selected cells
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++) updateCell(r,c);
+    hlSel();updateUI();renderPreview();
+  }
+  function fmt(key,val){eachSel(function(cell){cell[key]=val;});}
+  function toggle(key){
+    var cur=cells[r0]&&cells[r0][c0]?cells[r0][c0][key]:false;
+    eachSel(function(cell){cell[key]=!cur;});
+  }
+
+  function updateCell(r,c){
+    var old=document.getElementById('g-'+r+'-'+c);
+    if(!old) return;
+    var nd=buildCell(r,c);
+    old.parentNode.replaceChild(nd,old);
+    nd.addEventListener('dblclick',onDblClick);
+  }
+
+  // ─── Borders ───
+  function border(type){
+    var minR=Math.min(r0,r1),maxR=Math.max(r0,r1);
+    var minC=Math.min(c0,c1),maxC=Math.max(c0,c1);
+    var b={w:bw,c:bcol,s:bs};
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++){
+      var cell=cells[r]&&cells[r][c];if(!cell) continue;
+      if(type==='none'){cell.bt=null;cell.bb=null;cell.bl=null;cell.br=null;}
+      else if(type==='all'){cell.bt=Object.assign({},b);cell.bb=Object.assign({},b);cell.bl=Object.assign({},b);cell.br=Object.assign({},b);}
+      else if(type==='top') cell.bt=Object.assign({},b);
+      else if(type==='bottom') cell.bb=Object.assign({},b);
+      else if(type==='left') cell.bl=Object.assign({},b);
+      else if(type==='right') cell.br=Object.assign({},b);
+      else if(type==='thick'){var t={w:2,c:bcol,s:bs};cell.bt=t;cell.bb=t;cell.bl=t;cell.br=t;}
+      else if(type==='outer'){
+        if(r===minR) cell.bt=Object.assign({},b);
+        if(r===maxR) cell.bb=Object.assign({},b);
+        if(c===minC) cell.bl=Object.assign({},b);
+        if(c===maxC) cell.br=Object.assign({},b);
+      }
+      else if(type==='inner'){
+        if(r>minR) cell.bt=Object.assign({},b);
+        if(r<maxR) cell.bb=Object.assign({},b);
+        if(c>minC) cell.bl=Object.assign({},b);
+        if(c<maxC) cell.br=Object.assign({},b);
+      }
+    }
+    pushHist();
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++) updateCell(r,c);
+    renderPreview();
+  }
+
+  // ─── Merge ───
+  function merge(){
+    var minR=Math.min(r0,r1),maxR=Math.max(r0,r1);
+    var minC=Math.min(c0,c1),maxC=Math.max(c0,c1);
+    if(minR===maxR&&minC===maxC){alert('เลือกหลาย cell ก่อน');return;}
+    var texts=[];
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++) if(cells[r]&&cells[r][c]&&cells[r][c].text) texts.push(cells[r][c].text);
+    var master=cells[minR][minC];
+    master.merged={r:minR,c:minC,rs:maxR-minR+1,cs:maxC-minC+1};
+    master.text=texts.join(' ');
+    for(var r=minR;r<=maxR;r++) for(var c=minC;c<=maxC;c++){
+      if(r===minR&&c===minC) continue;
+      if(cells[r]&&cells[r][c]) cells[r][c].mergedHidden=true;
+    }
+    pushHist();render();renderPreview();
+  }
+  function unmerge(){
+    var cell=cells[r0]&&cells[r0][c0];
+    if(!cell||!cell.merged) return;
+    var m=cell.merged;
+    for(var r=m.r;r<m.r+m.rs;r++) for(var c=m.c;c<m.c+m.cs;c++) if(cells[r]&&cells[r][c]){cells[r][c].mergedHidden=false;cells[r][c].merged=null;}
+    pushHist();render();renderPreview();
+  }
+
+  // ─── Row/Col operations ───
+  function insRow(dir){
+    var idx=dir<0?r0:r0+1;
+    var nr=[];for(var c=0;c<COLS;c++) nr.push(mkc());
+    cells.splice(idx,0,nr);rh.splice(idx,0,22);ROWS++;
+    pushHist();render();
+  }
+  function delRow(){
+    if(ROWS<=1) return;
+    cells.splice(r0,1);rh.splice(r0,1);ROWS--;
+    r0=Math.min(r0,ROWS-1);r1=r0;
+    pushHist();render();
+  }
+  function insCol(dir){
+    var idx=dir<0?c0:c0+1;
+    for(var r=0;r<ROWS;r++) cells[r].splice(idx,0,mkc());
+    cw.splice(idx,0,80);COLS++;
+    pushHist();render();
+  }
+  function delCol(){
+    if(COLS<=1) return;
+    for(var r=0;r<ROWS;r++) cells[r].splice(c0,1);
+    cw.splice(c0,1);COLS--;
+    c0=Math.min(c0,COLS-1);c1=c0;
+    pushHist();render();
+  }
+  function setRH(h){for(var r=Math.min(r0,r1);r<=Math.max(r0,r1);r++) rh[r]=+h;pushHist();render();}
+  function setCW(w){for(var c=Math.min(c0,c1);c<=Math.max(c0,c1);c++) cw[c]=+w;pushHist();render();}
+  function fvalInput(val){if(cells[r0]&&cells[r0][c0]) cells[r0][c0].text=val;}
+
+  // ─── History ───
+  function pushHist(){
+    hist=hist.slice(0,hi+1);
+    hist.push(JSON.stringify({cells:cells,rh:rh,cw:cw,ROWS:ROWS,COLS:COLS}));
+    hi=hist.length-1;
+    if(hist.length>60){hist.shift();hi--;}
+  }
+  function undo(){if(hi>0){hi--;loadState(hist[hi]);render();renderPreview();}}
+  function redo(){if(hi<hist.length-1){hi++;loadState(hist[hi]);render();renderPreview();}}
+  function loadState(s){
+    var d=JSON.parse(s);
+    cells=d.cells;rh=d.rh;cw=d.cw;ROWS=d.ROWS;COLS=d.COLS;
+  }
+
+  // ─── Preview ───
+  function renderPreview(){
+    var paper=document.getElementById('prevpaper');
+    if(!paper) return;
+    paper.style.width=PW+'px';
+    paper.style.minHeight=PH+'px';
+    paper.style.overflow='hidden';
+    // build table HTML
+    var html='<table style="border-collapse:collapse;width:100%;table-layout:fixed;font-family:Sarabun,sans-serif">';
+    html+='<colgroup>';
+    for(var c=0;c<COLS;c++) html+='<col style="width:'+cw[c]+'px;min-width:'+cw[c]+'px">';
+    html+='</colgroup><tbody>';
+    for(var r=0;r<ROWS;r++){
+      html+='<tr style="height:'+rh[r]+'px">';
+      for(var c=0;c<COLS;c++){
+        var cell=cells[r][c];
+        if(cell.mergedHidden) continue;
+        var cs=cell.merged?cell.merged.cs:1;
+        var rs=cell.merged?cell.merged.rs:1;
+        var st='font-size:'+(cell.fontSize||10)+'pt;';
+        st+='font-family:'+(cell.fontFamily||'Sarabun')+',sans-serif;';
+        st+='font-weight:'+(cell.bold?'700':'400')+';';
+        st+='font-style:'+(cell.italic?'italic':'normal')+';';
+        st+='text-decoration:'+(cell.underline?'underline':'none')+';';
+        st+='text-align:'+(cell.align||'left')+';';
+        st+='vertical-align:'+(cell.valign||'top')+';';
+        st+='color:'+(cell.color||'#000')+';';
+        st+='background:'+(cell.bgColor||'transparent')+';';
+        st+='padding:'+(cell.padding||2)+'px '+(+(cell.padding||2)+4)+'px;';
+        st+='white-space:'+(cell.wrap?'pre-wrap':'nowrap')+';';
+        st+='overflow:hidden;line-height:1.35;';
+        if(cell.bt) st+='border-top:'+cell.bt.w+'px '+cell.bt.s+' '+cell.bt.c+';'; else st+='border-top:none;';
+        if(cell.bb) st+='border-bottom:'+cell.bb.w+'px '+cell.bb.s+' '+cell.bb.c+';'; else st+='border-bottom:none;';
+        if(cell.bl) st+='border-left:'+cell.bl.w+'px '+cell.bl.s+' '+cell.bl.c+';'; else st+='border-left:none;';
+        if(cell.br) st+='border-right:'+cell.br.w+'px '+cell.br.s+' '+cell.br.c+';'; else st+='border-right:none;';
+        html+='<td colspan="'+cs+'" rowspan="'+rs+'" style="'+st+'">'+(cell.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')+'</td>';
+      }
+      html+='</tr>';
+    }
+    html+='</tbody></table>';
+    paper.innerHTML=html;
+    // scale to fit preview panel
+    var pw2=document.getElementById('prev').clientWidth-20;
+    var scale=pw2/PW;
+    paper.style.transform='scale('+scale+')';
+    paper.style.transformOrigin='top left';
+    var ps=document.getElementById('prevscroll');
+    if(ps) ps.style.height=(PH*scale+20)+'px';
+  }
+
+  // ─── Save/Load/Export ───
+  function save(){
+    var name=prompt('ชื่อแบบฟอร์ม:','ใบกำกับภาษี CCS');
+    if(!name) return;
+    var data=JSON.stringify({cells:cells,rh:rh,cw:cw,ROWS:ROWS,COLS:COLS,PW:PW,PH:PH});
+    localStorage.setItem('v2form_'+name,data);
+    var list=JSON.parse(localStorage.getItem('v2form_list')||'[]');
+    if(list.indexOf(name)<0) list.push(name);
+    localStorage.setItem('v2form_list',JSON.stringify(list));
+    localStorage.setItem('active_form_layout',data);
+    localStorage.setItem('active_form_name',name);
+    toast('✅ บันทึก "'+name+'" แล้ว');
+  }
+  function load(){
+    var list=JSON.parse(localStorage.getItem('v2form_list')||'[]');
+    if(!list.length){alert('ยังไม่มีแบบฟอร์มที่บันทึกไว้');return;}
+    var name=prompt('แบบฟอร์มที่มี:\n'+list.map(function(n,i){return (i+1)+'. '+n;}).join('\n')+'\n\nพิมพ์ชื่อ:');
+    if(!name) return;
+    var data=localStorage.getItem('v2form_'+name);
+    if(!data){alert('ไม่พบ "'+name+'"');return;}
+    loadState(data);pushHist();render();renderPreview();toast('📂 โหลด "'+name+'"');
+  }
+  function exportHTML(){
+    renderPreview();
+    var pp=document.getElementById('prevpaper');
+    if(!pp) return;
+    // reset scale for export
+    pp.style.transform='none';
+    var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}@page{size:A4 portrait;margin:0}body{font-family:Sarabun,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}</style></head><body>'+pp.innerHTML+'</body>
+</html>
